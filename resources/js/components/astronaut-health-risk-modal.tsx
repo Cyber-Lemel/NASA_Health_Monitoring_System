@@ -2,25 +2,18 @@ import React, { useState, useEffect } from 'react';
 import {
     X,
     Activity,
-    Shield,
     Heart,
     Eye,
-    Bone,
     Radio,
     Zap,
     Biohazard,
     AlertTriangle,
-    Sliders,
     Sparkles,
     CheckCircle2,
     RefreshCw,
     Play,
     Check,
-    ChevronRight,
-    Flame,
     Info,
-    FileText,
-    ArrowUpRight,
 } from 'lucide-react';
 import type { AstronautFullData } from '@/types/astronaut';
 import { toast } from 'sonner';
@@ -43,23 +36,13 @@ export default function AstronautHealthRiskModal({
     // Input States
     const [systolic, setSystolic] = useState<number>(148);
     const [diastolic, setDiastolic] = useState<number>(96);
-    const [heartRate, setHeartRate] = useState<number>(
-        astronaut?.vitals.heartRate.numericValue ?? 118
-    );
-    const [spo2, setSpo2] = useState<number>(
-        astronaut?.vitals.spO2.numericValue ?? 97
-    );
-    const [coreTemp, setCoreTemp] = useState<number>(
-        astronaut?.vitals.coreTemp.numericValue ?? 37.1
-    );
+    const [heartRate, setHeartRate] = useState<number>(astronaut?.vitals.heartRate.numericValue ?? 118);
+    const [spo2, setSpo2] = useState<number>(astronaut?.vitals.spO2.numericValue ?? 97);
+    const [coreTemp, setCoreTemp] = useState<number>(astronaut?.vitals.coreTemp.numericValue ?? 37.1);
     const [radiationRate, setRadiationRate] = useState<number>(0.22);
-    const [boneLoss, setBoneLoss] = useState<number>(
-        parseFloat(astronaut?.bio.boneDensityLoss || '-3.2')
-    );
+    const [boneLoss, setBoneLoss] = useState<number>(parseFloat(astronaut?.bio.boneDensityLoss || '-3.2'));
     const [cabinCo2, setCabinCo2] = useState<number>(2.8);
-    const [hydration, setHydration] = useState<number>(
-        astronaut?.vitals.hydration.numericValue ?? 72
-    );
+    const [hydration, setHydration] = useState<number>(astronaut?.vitals.hydration.numericValue ?? 72);
 
     // API Result State
     const [loading, setLoading] = useState<boolean>(false);
@@ -68,7 +51,6 @@ export default function AstronautHealthRiskModal({
     const [completedActions, setCompletedActions] = useState<Set<string>>(new Set());
     const [executingId, setExecutingId] = useState<string | null>(null);
 
-    // Fetch initial analysis when modal opens
     useEffect(() => {
         if (isOpen) {
             runAnalysis();
@@ -126,7 +108,6 @@ export default function AstronautHealthRiskModal({
         }
     };
 
-    // Quick Scenario Presets
     const applyPreset = (presetName: string) => {
         if (presetName === 'high_bp_crisis') {
             setSystolic(162);
@@ -134,7 +115,7 @@ export default function AstronautHealthRiskModal({
             setHeartRate(110);
             setSpo2(97);
             setCoreTemp(37.2);
-            setRadiationRate(0.20);
+            setRadiationRate(0.2);
             setBoneLoss(-3.5);
             setCabinCo2(3.1);
             setHydration(68);
@@ -194,108 +175,104 @@ export default function AstronautHealthRiskModal({
 
     if (!isOpen) return null;
 
+    // Shared styles
+    const card = 'rounded-3xl border border-[#1b2a3a] bg-[#0a121d]';
+    const inner = 'rounded-2xl border border-[#1b2a3a] bg-[#0c1521]';
+    const labelCls = 'block text-[11px] font-semibold uppercase tracking-wider text-slate-400';
+    const inputCls =
+        'mt-2 w-full rounded-xl border border-[#24384d] bg-[#05080f] px-3 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-400';
+    const presetBtn =
+        'inline-flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold transition';
+
     const riskBadgeColor =
         analysisResult?.overall_risk_level === 'CRITICAL_EMERGENCY'
-            ? 'border-rose-600 bg-rose-950 text-rose-300 shadow-[0_0_12px_rgba(225,29,72,0.4)]'
+            ? 'border-red-500/40 bg-red-500/10 text-red-300'
             : analysisResult?.overall_risk_level === 'HIGH_RISK'
-            ? 'border-amber-500 bg-amber-950 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
-            : analysisResult?.overall_risk_level === 'MODERATE_RISK'
-            ? 'border-sky-500 bg-sky-950 text-sky-300'
-            : 'border-emerald-500 bg-emerald-950 text-emerald-300';
+              ? 'border-amber-400/40 bg-amber-400/10 text-amber-300'
+              : analysisResult?.overall_risk_level === 'MODERATE_RISK'
+                ? 'border-sky-400/40 bg-sky-400/10 text-sky-300'
+                : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300';
+
+    const fields = [
+        { label: 'Systolic BP', unit: 'mmHg', value: systolic, set: setSystolic, hint: 'Nominal: < 120', step: undefined },
+        { label: 'Diastolic BP', unit: 'mmHg', value: diastolic, set: setDiastolic, hint: 'Nominal: < 80', step: undefined },
+        { label: 'Heart Rate', unit: 'bpm', value: heartRate, set: setHeartRate, hint: 'Nominal: 60 - 100', step: undefined },
+        { label: 'SpO2 Oxygen', unit: '%', value: spo2, set: setSpo2, hint: 'Nominal: 95 - 100%', step: '0.5' },
+        { label: 'Cabin pCO2', unit: 'mmHg', value: cabinCo2, set: setCabinCo2, hint: 'Limit: < 3.0 mmHg', step: '0.1' },
+    ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="relative w-full max-w-5xl bg-[#06121e] border border-[#1a4b6c] text-[#5cdbdf] font-mono shadow-[0_0_60px_rgba(10,31,46,0.95)] flex flex-col max-h-[92vh] overflow-hidden">
-                {/* Tech Corners */}
-                <span className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-[#5cdbdf]" />
-                <span className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-[#5cdbdf]" />
-                <span className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-[#5cdbdf]" />
-                <span className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-[#5cdbdf]" />
-
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05080f]/80 p-3 backdrop-blur-sm sm:p-5">
+            <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-[#1b2a3a] bg-[#05080f] text-white shadow-2xl">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-3.5 border-b border-[#1a4b6c] bg-[#0a1f2e]/80 gap-3 shrink-0">
+                <div className="flex shrink-0 flex-col justify-between gap-3 border-b border-[#1b2a3a] bg-[#0a121d] px-6 py-4 sm:flex-row sm:items-center">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 border border-[#5cdbdf]/40 bg-[#5cdbdf]/10 text-[#5cdbdf] shrink-0">
-                            <Activity className="w-5 h-5 text-cyan-400" />
-                        </div>
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+                            <Activity size={20} />
+                        </span>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-sm sm:text-base font-bold text-white tracking-wider flex items-center gap-1.5">
-                                    <span>ORBIT // ASTRONAUT HEALTH RISK & PATHOPHYSIOLOGY API</span>
-                                </h3>
-                                <span className="text-[10px] px-1.5 py-0.2 border border-cyan-800 bg-cyan-950 text-cyan-300 hidden md:inline">
-                                    NASA-STD-3001
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400">
-                                Deep-Space Clinical Risk Analysis • Microgravity Pathology & Autonomous Countermeasures
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                                NASA-STD-3001
+                            </p>
+                            <h3 className="font-bold">Astronaut Health Risk Analysis</h3>
+                            <p className="text-xs text-slate-400">
+                                Microgravity pathology and autonomous countermeasures
                             </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Tab Switcher */}
-                        <div className="flex border border-[#1a4b6c] bg-[#030b14] p-0.5 text-xs">
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab('analyzer')}
-                                className={`px-3 py-1 font-bold transition-all cursor-pointer ${
-                                    activeTab === 'analyzer'
-                                        ? 'bg-[#5cdbdf] text-[#030b14]'
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
-                            >
-                                Risk Analyzer
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab('knowledge')}
-                                className={`px-3 py-1 font-bold transition-all cursor-pointer ${
-                                    activeTab === 'knowledge'
-                                        ? 'bg-[#5cdbdf] text-[#030b14]'
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
-                            >
-                                Reference Knowledge
-                            </button>
+                        <div className="flex rounded-full border border-[#24384d] bg-[#0c1521] p-1 text-sm">
+                            {(['analyzer', 'knowledge'] as const).map((tab) => (
+                                <button
+                                    key={tab}
+                                    type="button"
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`cursor-pointer rounded-full px-4 py-1.5 font-semibold transition ${
+                                        activeTab === tab
+                                            ? 'bg-cyan-300 text-[#05080f]'
+                                            : 'text-slate-400 hover:text-white'
+                                    }`}
+                                >
+                                    {tab === 'analyzer' ? 'Risk analyzer' : 'Reference'}
+                                </button>
+                            ))}
                         </div>
-
                         <button
                             type="button"
                             onClick={onClose}
-                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf] transition-colors cursor-pointer"
+                            className="cursor-pointer rounded-lg p-2 text-slate-400 hover:bg-[#112030] hover:text-white"
                         >
-                            <X className="w-4 h-4" />
+                            <X size={18} />
                         </button>
                     </div>
                 </div>
 
-                {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                {/* Content */}
+                <div className="flex-1 space-y-5 overflow-y-auto p-6">
                     {activeTab === 'analyzer' && (
                         <>
-                            {/* Scenario Presets Strip */}
-                            <div className="p-3 border border-[#1a4b6c] bg-[#030b14] space-y-2">
-                                <div className="flex items-center justify-between text-xs">
-                                    <span className="font-bold text-white flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                                        <span>QUICK SCENARIO PRESETS (SIMULATE SPACEFLIGHT ANOMALIES):</span>
+                            {/* Presets */}
+                            <div className={`${card} p-5`}>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2 text-sm font-bold">
+                                        <Sparkles size={16} className="text-cyan-300" />
+                                        Quick scenario presets
                                     </span>
-                                    <span className="text-[10px] text-slate-400">
-                                        Click a scenario to populate parameters & evaluate risks
+                                    <span className="text-xs text-slate-500">
+                                        Click a scenario to fill the values and evaluate
                                     </span>
                                 </div>
-                                <div className="flex flex-wrap gap-2 text-xs">
+                                <div className="mt-4 flex flex-wrap gap-2">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             applyPreset('high_bp_crisis');
                                             runAnalysis();
                                         }}
-                                        className="px-2.5 py-1.5 border border-rose-600/70 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                        className={`${presetBtn} border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20`}
                                     >
-                                        <Heart className="w-3.5 h-3.5 text-rose-400" />
-                                        <span>High Blood Pressure Crisis (162/102 mmHg)</span>
+                                        <Heart size={14} /> High blood pressure crisis (162/102)
                                     </button>
                                     <button
                                         type="button"
@@ -303,10 +280,9 @@ export default function AstronautHealthRiskModal({
                                             applyPreset('stage1_hypertension');
                                             runAnalysis();
                                         }}
-                                        className="px-2.5 py-1.5 border border-amber-600/70 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-bold transition-all cursor-pointer flex items-center gap-1"
+                                        className={`${presetBtn} border-amber-400/30 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20`}
                                     >
-                                        <Eye className="w-3.5 h-3.5 text-amber-400" />
-                                        <span>Stage 1 Hypertension & SANS (145/94 mmHg)</span>
+                                        <Eye size={14} /> Stage 1 hypertension and SANS (145/94)
                                     </button>
                                     <button
                                         type="button"
@@ -314,10 +290,9 @@ export default function AstronautHealthRiskModal({
                                             applyPreset('hypercapnia');
                                             runAnalysis();
                                         }}
-                                        className="px-2.5 py-1.5 border border-purple-600/70 bg-purple-950/40 text-purple-300 hover:bg-purple-900/60 font-bold transition-all cursor-pointer flex items-center gap-1"
+                                        className={`${presetBtn} border-purple-400/30 bg-purple-400/10 text-purple-300 hover:bg-purple-400/20`}
                                     >
-                                        <Biohazard className="w-3.5 h-3.5 text-purple-400" />
-                                        <span>CO2 Hypercapnia (3.6 mmHg)</span>
+                                        <Biohazard size={14} /> CO2 hypercapnia (3.6 mmHg)
                                     </button>
                                     <button
                                         type="button"
@@ -325,10 +300,9 @@ export default function AstronautHealthRiskModal({
                                             applyPreset('radiation_surge');
                                             runAnalysis();
                                         }}
-                                        className="px-2.5 py-1.5 border border-sky-600/70 bg-sky-950/40 text-sky-300 hover:bg-sky-900/60 font-bold transition-all cursor-pointer flex items-center gap-1"
+                                        className={`${presetBtn} border-sky-400/30 bg-sky-400/10 text-sky-300 hover:bg-sky-400/20`}
                                     >
-                                        <Radio className="w-3.5 h-3.5 text-sky-400" />
-                                        <span>Radiation Storm (0.65 mSv/h)</span>
+                                        <Radio size={14} /> Radiation storm (0.65 mSv/h)
                                     </button>
                                     <button
                                         type="button"
@@ -336,253 +310,175 @@ export default function AstronautHealthRiskModal({
                                             applyPreset('nominal');
                                             runAnalysis();
                                         }}
-                                        className="px-2.5 py-1.5 border border-emerald-600/70 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 font-bold transition-all cursor-pointer flex items-center gap-1"
+                                        className={`${presetBtn} border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20`}
                                     >
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                                        <span>Nominal Flight Profile</span>
+                                        <CheckCircle2 size={14} /> Nominal flight profile
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Parameter Controls Grid */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
-                                {/* Systolic BP */}
-                                <div className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-1">
-                                    <label className="text-[10px] text-slate-400 font-bold block">
-                                        SYSTOLIC BP (mmHg)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={systolic}
-                                        onChange={(e) => setSystolic(Number(e.target.value))}
-                                        className="w-full bg-[#030b14] border border-[#1a4b6c] px-2 py-1 text-white font-bold text-sm focus:border-cyan-400 outline-none"
-                                    />
-                                    <span className="text-[9px] text-slate-400">Nominal: &lt; 120</span>
-                                </div>
-
-                                {/* Diastolic BP */}
-                                <div className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-1">
-                                    <label className="text-[10px] text-slate-400 font-bold block">
-                                        DIASTOLIC BP (mmHg)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={diastolic}
-                                        onChange={(e) => setDiastolic(Number(e.target.value))}
-                                        className="w-full bg-[#030b14] border border-[#1a4b6c] px-2 py-1 text-white font-bold text-sm focus:border-cyan-400 outline-none"
-                                    />
-                                    <span className="text-[9px] text-slate-400">Nominal: &lt; 80</span>
-                                </div>
-
-                                {/* Heart Rate */}
-                                <div className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-1">
-                                    <label className="text-[10px] text-slate-400 font-bold block">
-                                        HEART RATE (bpm)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        value={heartRate}
-                                        onChange={(e) => setHeartRate(Number(e.target.value))}
-                                        className="w-full bg-[#030b14] border border-[#1a4b6c] px-2 py-1 text-white font-bold text-sm focus:border-cyan-400 outline-none"
-                                    />
-                                    <span className="text-[9px] text-slate-400">Nominal: 60 - 100</span>
-                                </div>
-
-                                {/* SpO2 */}
-                                <div className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-1">
-                                    <label className="text-[10px] text-slate-400 font-bold block">
-                                        SpO2 OXYGEN (%)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        value={spo2}
-                                        onChange={(e) => setSpo2(Number(e.target.value))}
-                                        className="w-full bg-[#030b14] border border-[#1a4b6c] px-2 py-1 text-white font-bold text-sm focus:border-cyan-400 outline-none"
-                                    />
-                                    <span className="text-[9px] text-slate-400">Nominal: 95 - 100%</span>
-                                </div>
-
-                                {/* Cabin CO2 */}
-                                <div className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-1">
-                                    <label className="text-[10px] text-slate-400 font-bold block">
-                                        CABIN pCO2 (mmHg)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={cabinCo2}
-                                        onChange={(e) => setCabinCo2(Number(e.target.value))}
-                                        className="w-full bg-[#030b14] border border-[#1a4b6c] px-2 py-1 text-white font-bold text-sm focus:border-cyan-400 outline-none"
-                                    />
-                                    <span className="text-[9px] text-slate-400">Limit: &lt; 3.0 mmHg</span>
-                                </div>
+                            {/* Inputs */}
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                                {fields.map((f) => (
+                                    <div key={f.label} className={`${card} p-4`}>
+                                        <label className={labelCls}>
+                                            {f.label} <span className="font-normal normal-case text-slate-500">{f.unit}</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step={f.step}
+                                            value={f.value}
+                                            onChange={(e) => f.set(Number(e.target.value))}
+                                            className={inputCls}
+                                        />
+                                        <p className="mt-2 text-xs text-slate-500">{f.hint}</p>
+                                    </div>
+                                ))}
                             </div>
 
-                            {/* Run Analysis CTA */}
-                            <div className="flex items-center justify-between">
-                                <span className="text-[11px] text-slate-400">
-                                    Target Astronaut:{' '}
-                                    <strong className="text-white">
-                                        {astronaut?.bio.name || 'CDR. Reid Wiseman'}
-                                    </strong>{' '}
-                                    ({astronaut?.bio.id || 'AST-01'})
-                                </span>
+                            {/* Evaluate */}
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm text-slate-400">
+                                    Target astronaut:{' '}
+                                    <strong className="text-white">{astronaut?.bio.name || 'CDR. Reid Wiseman'}</strong>{' '}
+                                    <span className="text-slate-500">({astronaut?.bio.id || 'AST-01'})</span>
+                                </p>
                                 <button
                                     type="button"
                                     onClick={runAnalysis}
                                     disabled={loading}
-                                    className="px-5 py-2 rounded bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.3)] disabled:opacity-50"
+                                    className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-[#05080f] transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                                    <span>EVALUATE ASTRONAUT HEALTH RISKS</span>
+                                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                                    Evaluate health risks
                                 </button>
                             </div>
 
-                            {/* Results Display */}
+                            {/* Results */}
                             {analysisResult && (
-                                <div className="space-y-4 pt-2">
-                                    {/* Overall Assessment Banner */}
-                                    <div className="p-4 border border-[#1a4b6c] bg-[#030b14] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2.5">
-                                                <span className="text-xs text-slate-400 font-bold">
-                                                    HEALTH RISK LEVEL:
+                                <div className="space-y-5">
+                                    {/* Overall */}
+                                    <div className={`${card} flex flex-col justify-between gap-4 p-5 md:flex-row md:items-center`}>
+                                        <div className="space-y-2">
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                                    Health risk level
                                                 </span>
                                                 <span
-                                                    className={`px-3 py-1 font-bold text-xs border tracking-wider ${riskBadgeColor}`}
+                                                    className={`rounded-full border px-3 py-1 text-xs font-bold ${riskBadgeColor}`}
                                                 >
                                                     {analysisResult.overall_risk_level}
                                                 </span>
-                                                <span className="text-xs text-slate-400">
-                                                    Health Index:{' '}
-                                                    <strong className="text-white text-base">
+                                                <span className="text-sm text-slate-400">
+                                                    Health index{' '}
+                                                    <strong className="text-lg text-white">
                                                         {analysisResult.health_score} / 100
                                                     </strong>
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-slate-300">
+                                            <p className="text-sm leading-relaxed text-slate-300">
                                                 {analysisResult.clinical_summary}
                                             </p>
                                         </div>
 
                                         {analysisResult.hazard_correlations?.length > 0 && (
-                                            <div className="text-[10px] space-y-1 text-right">
-                                                <span className="text-slate-400 block font-bold">
-                                                    CORRELATED NASA HAZARDS:
+                                            <div className="md:max-w-xs md:text-right">
+                                                <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                                    Correlated NASA hazards
                                                 </span>
-                                                {analysisResult.hazard_correlations.map(
-                                                    (hz: string, idx: number) => (
-                                                        <span
-                                                            key={idx}
-                                                            className="inline-block px-1.5 py-0.5 bg-[#0a1f2e] border border-[#1a4b6c] text-[#5cdbdf] ml-1 mb-1"
-                                                        >
-                                                            {hz}
-                                                        </span>
-                                                    )
-                                                )}
+                                                {analysisResult.hazard_correlations.map((hz: string, idx: number) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="mb-1 ml-1 inline-block rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-xs text-cyan-300"
+                                                    >
+                                                        {hz}
+                                                    </span>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Identified Spaceflight Health Risks Cards */}
+                                    {/* Identified risks */}
                                     <div className="space-y-3">
-                                        <h4 className="text-xs font-bold text-white tracking-wider flex items-center gap-2 border-b border-[#1a4b6c] pb-1.5">
-                                            <AlertTriangle className="w-4 h-4 text-amber-400" />
-                                            <span>
-                                                IDENTIFIED RISKS & SPACEFLIGHT PATHOPHYSIOLOGY (
-                                                {analysisResult.identified_risks_count})
-                                            </span>
+                                        <h4 className="flex items-center gap-2 border-b border-[#1b2a3a] pb-2 text-sm font-bold">
+                                            <AlertTriangle size={16} className="text-amber-400" />
+                                            Identified risks and spaceflight pathophysiology (
+                                            {analysisResult.identified_risks_count})
                                         </h4>
 
                                         {analysisResult.identified_risks?.length === 0 ? (
-                                            <div className="p-4 border border-emerald-800 bg-emerald-950/20 text-emerald-300 text-xs flex items-center gap-2">
-                                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                                <span>
-                                                    All physiological parameters are within nominal NASA-STD-3001
-                                                    exploration limits. No acute spaceflight pathology detected.
-                                                </span>
+                                            <div className="flex items-center gap-2 rounded-3xl border border-emerald-400/20 bg-emerald-400/5 p-4 text-sm text-emerald-300">
+                                                <CheckCircle2 size={16} className="shrink-0" />
+                                                All physiological parameters are within nominal NASA-STD-3001 exploration
+                                                limits. No acute spaceflight pathology detected.
                                             </div>
                                         ) : (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                                                {analysisResult.identified_risks.map(
-                                                    (risk: any, rIdx: number) => {
-                                                        const isCrit = risk.risk_severity === 'CRITICAL';
-                                                        return (
-                                                            <div
-                                                                key={rIdx}
-                                                                className={`p-3.5 border rounded-sm space-y-2.5 ${
-                                                                    isCrit
-                                                                        ? 'border-rose-700 bg-rose-950/20'
-                                                                        : 'border-amber-700/80 bg-amber-950/20'
-                                                                }`}
-                                                            >
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="font-bold text-white text-xs">
-                                                                            {risk.title}
-                                                                        </span>
-                                                                    </div>
-                                                                    <span
-                                                                        className={`text-[9px] font-bold px-1.5 py-0.5 border ${
-                                                                            isCrit
-                                                                                ? 'border-rose-600 bg-rose-950 text-rose-300'
-                                                                                : 'border-amber-600 bg-amber-950 text-amber-300'
-                                                                        }`}
-                                                                    >
-                                                                        {risk.value} • {risk.risk_severity}
-                                                                    </span>
-                                                                </div>
-
-                                                                {/* Pathophysiology */}
-                                                                <div className="p-2 border border-[#1a4b6c]/60 bg-[#030b14] text-[11px] text-slate-300 space-y-1">
-                                                                    <span className="text-[10px] font-bold text-cyan-400 block">
-                                                                        MICROGRAVITY PATHOPHYSIOLOGY:
-                                                                    </span>
-                                                                    <p className="text-slate-400 text-[10px] leading-relaxed">
-                                                                        {risk.pathophysiology}
-                                                                    </p>
-                                                                </div>
-
-                                                                {/* Specific Consequences */}
-                                                                <div className="space-y-1 text-[10px]">
-                                                                    <span className="font-bold text-slate-300 block">
-                                                                        POSSIBLE SPACEFLIGHT RISKS:
-                                                                    </span>
-                                                                    <ul className="space-y-1 pl-1 text-slate-300">
-                                                                        {risk.possible_spaceflight_risks?.map(
-                                                                            (c: string, cIdx: number) => (
-                                                                                <li
-                                                                                    key={cIdx}
-                                                                                    className="flex items-start gap-1.5 text-slate-300"
-                                                                                >
-                                                                                    <span className="text-amber-400 shrink-0">
-                                                                                        •
-                                                                                    </span>
-                                                                                    <span>{c}</span>
-                                                                                </li>
-                                                                            )
-                                                                        )}
-                                                                    </ul>
-                                                                </div>
+                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                {analysisResult.identified_risks.map((risk: any, rIdx: number) => {
+                                                    const isCrit = risk.risk_severity === 'CRITICAL';
+                                                    return (
+                                                        <div
+                                                            key={rIdx}
+                                                            className={`space-y-3 rounded-3xl border p-4 ${
+                                                                isCrit
+                                                                    ? 'border-red-500/30 bg-red-500/5'
+                                                                    : 'border-amber-400/30 bg-amber-400/5'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <span className="text-sm font-bold">{risk.title}</span>
+                                                                <span
+                                                                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                                                                        isCrit
+                                                                            ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                                                                            : 'border-amber-400/40 bg-amber-400/10 text-amber-300'
+                                                                    }`}
+                                                                >
+                                                                    {risk.value} • {risk.risk_severity}
+                                                                </span>
                                                             </div>
-                                                        );
-                                                    }
-                                                )}
+
+                                                            <div className={`${inner} p-3`}>
+                                                                <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                                                                    Microgravity pathophysiology
+                                                                </p>
+                                                                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                                                                    {risk.pathophysiology}
+                                                                </p>
+                                                            </div>
+
+                                                            <div>
+                                                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                                                    Possible spaceflight risks
+                                                                </p>
+                                                                <ul className="mt-1.5 space-y-1 text-xs text-slate-300">
+                                                                    {risk.possible_spaceflight_risks?.map(
+                                                                        (c: string, cIdx: number) => (
+                                                                            <li key={cIdx} className="flex items-start gap-2">
+                                                                                <span className="text-amber-400">•</span>
+                                                                                <span>{c}</span>
+                                                                            </li>
+                                                                        ),
+                                                                    )}
+                                                                </ul>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Recommended Autonomous Countermeasures */}
+                                    {/* Countermeasures */}
                                     {analysisResult.autonomous_countermeasures?.length > 0 && (
-                                        <div className="p-3.5 border border-[#1a4b6c] bg-[#030b14] space-y-3">
-                                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-2">
-                                                <span className="font-bold text-white text-xs flex items-center gap-1.5">
-                                                    <Zap className="w-4 h-4 text-cyan-400" />
-                                                    <span>AUTONOMOUS NASA-STD-3001 COUNTERMEASURES</span>
+                                        <div className={`${card} space-y-3 p-5`}>
+                                            <div className="flex items-center justify-between border-b border-[#1b2a3a] pb-3">
+                                                <span className="flex items-center gap-2 text-sm font-bold">
+                                                    <Zap size={16} className="text-cyan-300" />
+                                                    Autonomous NASA-STD-3001 countermeasures
                                                 </span>
-                                                <span className="text-[10px] px-2 py-0.5 border border-cyan-800 bg-cyan-950 text-cyan-300">
-                                                    ACTIONABLE PROTOCOLS
+                                                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                                                    Actionable protocols
                                                 </span>
                                             </div>
 
@@ -594,47 +490,38 @@ export default function AstronautHealthRiskModal({
                                                         return (
                                                             <div
                                                                 key={aIdx}
-                                                                className="p-2.5 border border-[#1a4b6c] bg-[#0a1f2e] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                                                                className={`${inner} flex flex-col items-start justify-between gap-3 p-3 text-sm sm:flex-row sm:items-center`}
                                                             >
-                                                                <div className="flex items-start gap-2">
-                                                                    <span className="text-cyan-400 font-bold shrink-0">
-                                                                        [{aIdx + 1}]
+                                                                <div className="flex items-start gap-3">
+                                                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-bold text-cyan-300">
+                                                                        {aIdx + 1}
                                                                     </span>
-                                                                    <span className="text-slate-200">
-                                                                        {actionText}
-                                                                    </span>
+                                                                    <span className="text-slate-200">{actionText}</span>
                                                                 </div>
                                                                 <button
                                                                     type="button"
                                                                     disabled={isDone || isExecuting}
-                                                                    onClick={() =>
-                                                                        handleExecuteCountermeasure(actionText)
-                                                                    }
-                                                                    className={`px-3 py-1.5 font-bold transition-all flex items-center gap-1.5 shrink-0 text-[11px] cursor-pointer ${
+                                                                    onClick={() => handleExecuteCountermeasure(actionText)}
+                                                                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                                                                         isDone
-                                                                            ? 'border border-emerald-600 bg-emerald-950 text-emerald-300 cursor-default'
-                                                                            : 'border border-cyan-500 bg-[#030b14] text-cyan-300 hover:bg-[#5cdbdf] hover:text-black'
+                                                                            ? 'cursor-default border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                                                                            : 'cursor-pointer border-cyan-400/40 text-cyan-300 hover:bg-cyan-400 hover:text-slate-900'
                                                                     }`}
                                                                 >
                                                                     {isDone ? (
                                                                         <>
-                                                                            <Check className="w-3 h-3 text-emerald-400" />
-                                                                            <span>EXECUTED</span>
+                                                                            <Check size={14} /> Executed
                                                                         </>
                                                                     ) : (
                                                                         <>
-                                                                            <Play className="w-3 h-3" />
-                                                                            <span>
-                                                                                {isExecuting
-                                                                                    ? 'INITIATING...'
-                                                                                    : 'EXECUTE NOW'}
-                                                                            </span>
+                                                                            <Play size={14} />
+                                                                            {isExecuting ? 'Initiating...' : 'Execute now'}
                                                                         </>
                                                                     )}
                                                                 </button>
                                                             </div>
                                                         );
-                                                    }
+                                                    },
                                                 )}
                                             </div>
                                         </div>
@@ -646,78 +533,69 @@ export default function AstronautHealthRiskModal({
 
                     {activeTab === 'knowledge' && (
                         <div className="space-y-4">
-                            <div className="p-3 border border-[#1a4b6c] bg-[#030b14]">
-                                <h4 className="text-xs font-bold text-white tracking-wider flex items-center gap-2">
-                                    <Info className="w-4 h-4 text-cyan-400" />
-                                    <span>NASA HUMAN RESEARCH PROGRAM (HRP) CLINICAL REFERENCE THRESHOLDS</span>
+                            <div className={`${card} p-5`}>
+                                <h4 className="flex items-center gap-2 text-sm font-bold">
+                                    <Info size={16} className="text-cyan-300" />
+                                    NASA HRP clinical reference thresholds
                                 </h4>
-                                <p className="text-[11px] text-slate-400 mt-1">
+                                <p className="mt-1 text-xs text-slate-400">
                                     Medical guidelines for long-duration deep space exploration under NASA-STD-3001.
                                 </p>
                             </div>
 
                             {knowledgeData ? (
-                                <div className="space-y-3">
-                                    {Object.entries(knowledgeData).map(
-                                        ([key, item]: [string, any]) => (
-                                            <div
-                                                key={key}
-                                                className="p-3.5 border border-[#1a4b6c] bg-[#0a1f2e]/70 space-y-2.5 text-xs"
-                                            >
-                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#1a4b6c] pb-2">
-                                                    <span className="font-bold text-white text-sm">
-                                                        {item.parameter}
-                                                    </span>
-                                                    <span className="text-[11px] text-amber-300 font-semibold">
-                                                        Danger Limit: {item.spaceflight_danger_threshold}
-                                                    </span>
-                                                </div>
-
-                                                <div className="text-[11px] text-slate-300 space-y-1">
-                                                    <strong className="text-cyan-400 text-[10px] block">
-                                                        MICROGRAVITY PATHOLOGY:
-                                                    </strong>
-                                                    <p className="text-slate-400">{item.primary_spaceflight_pathology}</p>
-                                                </div>
-
-                                                <div className="space-y-1 text-[11px]">
-                                                    <strong className="text-rose-300 text-[10px] block">
-                                                        POSSIBLE SPACEFLIGHT RISKS:
-                                                    </strong>
-                                                    <ul className="space-y-1 text-slate-300 pl-2">
-                                                        {item.possible_spaceflight_risks?.map(
-                                                            (r: string, idx: number) => (
-                                                                <li key={idx} className="flex items-start gap-1.5">
-                                                                    <span className="text-amber-400">•</span>
-                                                                    <span>{r}</span>
-                                                                </li>
-                                                            )
-                                                        )}
-                                                    </ul>
-                                                </div>
-
-                                                <div className="space-y-1 text-[11px] pt-1">
-                                                    <strong className="text-emerald-300 text-[10px] block">
-                                                        NASA COUNTERMEASURES:
-                                                    </strong>
-                                                    <ul className="space-y-1 text-slate-300 pl-2">
-                                                        {item.nasa_countermeasures?.map(
-                                                            (c: string, idx: number) => (
-                                                                <li key={idx} className="flex items-start gap-1.5">
-                                                                    <span className="text-emerald-400">•</span>
-                                                                    <span>{c}</span>
-                                                                </li>
-                                                            )
-                                                        )}
-                                                    </ul>
-                                                </div>
+                                <div className="space-y-4">
+                                    {Object.entries(knowledgeData).map(([key, item]: [string, any]) => (
+                                        <div key={key} className={`${card} space-y-3 p-5`}>
+                                            <div className="flex flex-col justify-between gap-1 border-b border-[#1b2a3a] pb-3 sm:flex-row sm:items-center">
+                                                <span className="font-bold">{item.parameter}</span>
+                                                <span className="text-xs font-semibold text-amber-300">
+                                                    Danger limit: {item.spaceflight_danger_threshold}
+                                                </span>
                                             </div>
-                                        )
-                                    )}
+
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                                                    Microgravity pathology
+                                                </p>
+                                                <p className="mt-1 text-sm text-slate-400">
+                                                    {item.primary_spaceflight_pathology}
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-red-300">
+                                                    Possible spaceflight risks
+                                                </p>
+                                                <ul className="mt-1.5 space-y-1 text-sm text-slate-300">
+                                                    {item.possible_spaceflight_risks?.map((r: string, idx: number) => (
+                                                        <li key={idx} className="flex items-start gap-2">
+                                                            <span className="text-amber-400">•</span>
+                                                            <span>{r}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+
+                                            <div>
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                                                    NASA countermeasures
+                                                </p>
+                                                <ul className="mt-1.5 space-y-1 text-sm text-slate-300">
+                                                    {item.nasa_countermeasures?.map((c: string, idx: number) => (
+                                                        <li key={idx} className="flex items-start gap-2">
+                                                            <span className="text-emerald-400">•</span>
+                                                            <span>{c}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-10 text-slate-400 text-xs">
-                                    Loading ORBIT clinical knowledge base...
+                                <div className="py-10 text-center text-sm text-slate-400">
+                                    Loading clinical knowledge base...
                                 </div>
                             )}
                         </div>
@@ -725,20 +603,17 @@ export default function AstronautHealthRiskModal({
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-3 border-t border-[#1a4b6c] bg-[#0a1f2e]/80 flex items-center justify-between text-xs shrink-0">
-                    <span className="text-slate-400 text-[11px]">
-                        ORBIT Autonomous Decision Engine • Standard NASA-STD-3001
-                    </span>
+                <div className="flex shrink-0 items-center justify-between border-t border-[#1b2a3a] bg-[#0a121d] px-6 py-3">
+                    <span className="text-xs text-slate-500">ORBIT Autonomous Decision Engine • NASA-STD-3001</span>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-1.5 border border-[#1a4b6c] bg-[#030b14] text-slate-300 hover:text-white hover:border-[#5cdbdf] transition-colors cursor-pointer"
+                        className="cursor-pointer rounded-full border border-[#24384d] bg-[#0c1521] px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-[#112030]"
                     >
-                        CLOSE ANALYZER
+                        Close
                     </button>
                 </div>
             </div>
         </div>
     );
 }
-
