@@ -479,7 +479,7 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
 
         // General NASA & Space Intelligence Default
         $reply = "### 🛰️ NASA CAPCOM Flight Assistant • Telemetry Report\n\n"
-            . "Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **Kaggle Spaceflight Physiological Archive**, and NASA live web data streams.\n\n"
+            . "Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **NASA Human Research Program (HRP) 5 Hazards Database (https://www.nasa.gov/hrp/hazards/)**, and NASA live web data streams.\n\n"
             . "#### Ready to assist with:\n"
             . "- **The 5 Hazards of Human Spaceflight (RIDGE)**: Radiation, Isolation, Distance, Gravity, and Hostile Environments.\n"
             . "- **Astronaut Biomedical Telemetry**: Real-time heart rate, SpO2, core temp, and ECG analysis.\n"

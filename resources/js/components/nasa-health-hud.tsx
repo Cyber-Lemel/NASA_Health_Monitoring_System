@@ -6,7 +6,7 @@ import {
     Database, Search, Sparkles, RefreshCw, Radio, Zap,
     Play, Pause, Wind, Shield, Settings, ClipboardList, Send, X,
     Clock, Heart, Volume2, VolumeX, Users, Layers, Expand,
-    CheckCircle2, ArrowUpRight, ArrowLeft
+    CheckCircle2, ArrowUpRight, ArrowLeft, ChevronRight
 } from 'lucide-react';
 import NasaLogo from '@/components/nasa-logo';
 import Astronaut3DModel from '@/components/astronaut-3d-model';
@@ -14,9 +14,9 @@ import TelemetryImportModal from '@/components/telemetry-import-modal';
 import TelemetryExportModal from '@/components/telemetry-export-modal';
 import SuitSystemsModal from '@/components/suit-systems-modal';
 import BiometricsDetailModal from '@/components/biometrics-detail-modal';
-import MissionLogsModal from '@/components/mission-logs-modal';
 import SystemSettingsModal from '@/components/system-settings-modal';
 import CrewSwitcherModal from '@/components/crew-switcher-modal';
+import AstronautSelfAssessmentModal from '@/components/astronaut-self-assessment-modal';
 import type {
     AstronautFullData,
     ParsedImportPayload,
@@ -97,89 +97,41 @@ const DEFAULT_ASTRONAUT: AstronautFullData = {
         radiationPercent: 85,
         batteryPercent: 74,
     },
-    alerts: [
-        {
-            level: 'WARNING',
-            title: 'DEHYDRATION & THERMAL EXERTION (MODERATE)',
-            actionsTaken: [
-                '[CHECKED] Liquid Cooling Garment (LCG) flow set to HIGH.',
-                '[CHECKED] In-suit fluid pouch consumption initiated (150mL electrolyte).',
-            ],
-            recommendedAction: 'Order 180s rest interval. Pause strenuous EVA tasks.',
-        },
-        {
-            level: 'WARNING',
-            title: 'ELEVATED METABOLIC RATE (HEART RATE > 130 BPM)',
-            actionsTaken: [
-                '[CHECKED] Real-time biometrics streaming to Flight Surgeon console.',
-                '[CHECKED] O2 flow rate bumped to 1.2 kg/hr nominal envelope.',
-            ],
-            recommendedAction: 'Direct crew member to perform 180s controlled breathing cycle.',
-        },
-    ],
-    logs: [
-        {
-            id: 'log-1',
-            timestamp: '13:42:05',
-            title: 'EVA Depressurization Complete',
-            action: '[TELEMETRY] Airlock depressurized to 0.0 kPa. Outer hatch unlatched.',
-            status: 'RESOLVED',
-        },
-        {
-            id: 'log-2',
-            timestamp: '13:35:19',
-            title: 'Suit Pressure Regulated',
-            action: '[ACTION] Primary oxygen regulator set to 4.3 psi nominal envelope.',
-            status: 'RESOLVED',
-        },
-        {
-            id: 'log-3',
-            timestamp: '13:20:00',
-            title: 'Pre-breathe Protocol Complete',
-            action: '[BIO] 120-minute 100% O2 pre-breathe verified to purge blood nitrogen.',
-            status: 'RESOLVED',
-        },
-        {
-            id: 'log-4',
-            timestamp: '12:50:44',
-            title: 'Biosensor Array Calibrated',
-            action: '[DIAGNOSTIC] Chest ECG electrodes and galvanic skin telemetry calibrated.',
-            status: 'RESOLVED',
-        },
-    ],
+    alerts: [],
+    logs: [],
 };
 
 // Fallback crew roster if database is unseeded
 const DEFAULT_CREW_ROSTER = [
     {
         Astronaut: 'AST-01',
-        Name: 'Commander Alex Vance',
-        Country: 'USA',
+        Name: 'CDR. Reid Wiseman',
+        Country: 'USA / NASA',
         Gender: 'Male',
-        Age_at_mission_start: 42,
-        'Mission_duration(Days)': 180,
-        Bone_Density_Loss: '-3.2%',
+        Age_at_mission_start: 48,
+        'Mission_duration(Days)': 165,
+        Bone_Density_Loss: '-2.6%',
         Role: 'Mission Commander',
     },
     {
         Astronaut: 'AST-02',
-        Name: 'Dr. Elena Rostova',
-        Country: 'Canada',
-        Gender: 'Female',
-        Age_at_mission_start: 36,
-        'Mission_duration(Days)': 210,
-        Bone_Density_Loss: '-4.1%',
-        Role: 'Payload Specialist',
+        Name: 'Victor Glover',
+        Country: 'USA / NASA',
+        Gender: 'Male',
+        Age_at_mission_start: 48,
+        'Mission_duration(Days)': 168,
+        Bone_Density_Loss: '-2.4%',
+        Role: 'Pilot / Flight Surgeon Ops',
     },
     {
         Astronaut: 'AST-03',
-        Name: 'Major Marcus Cole',
-        Country: 'United Kingdom',
-        Gender: 'Male',
-        Age_at_mission_start: 45,
-        'Mission_duration(Days)': 150,
-        Bone_Density_Loss: '-2.8%',
-        Role: 'Flight Engineer',
+        Name: 'Christina Koch',
+        Country: 'USA / NASA',
+        Gender: 'Female',
+        Age_at_mission_start: 41,
+        'Mission_duration(Days)': 328,
+        Bone_Density_Loss: '-5.1%',
+        Role: 'Mission Specialist',
     },
 ];
 
@@ -228,67 +180,8 @@ function generateAstronautProfile(record: any, timeStr: string): AstronautFullDa
 
     const radiationStatus = isHrElevated && evaStatus === 'ON-GOING' ? 'Safe (0.24 mSv/h)' : 'Safe (0.18 mSv/h)';
 
-    // Dynamic alert sets
     const alerts: MedicalAlert[] = [];
-    if (isHrElevated) {
-        alerts.push({
-            level: 'WARNING',
-            title: 'ELEVATED METABOLIC ACTIVITY (HEART RATE EXCEEDS 115 BPM)',
-            actionsTaken: [
-                `[CHECKED] Real-time biometrics synchronized with Flight Surgeon console (${name}).`,
-                '[CHECKED] Primary oxygen regulator maintained at 4.3 psi nominal envelope.',
-            ],
-            recommendedAction: 'Direct astronaut to hold station and perform 180s controlled breathing cycle.',
-        });
-    }
-
-    if (hydrationPct < 70) {
-        alerts.push({
-            level: 'WARNING',
-            title: 'HYDRATION ADVISORY: FLUID INTAKE DEFICIT DETECTED',
-            actionsTaken: [
-                '[CHECKED] In-suit hydration pouch consumption monitor queried.',
-                '[CHECKED] Liquid Cooling Garment (LCG) thermal loops set to auto-balance.',
-            ],
-            recommendedAction: 'Authorize in-suit electrolyte beverage consumption (minimum 250mL).',
-        });
-    }
-
-    if (alerts.length === 0) {
-        alerts.push({
-            level: 'NOMINAL',
-            title: 'ALL BIOMEDICAL TELEMETRY CHANNELS NOMINAL',
-            actionsTaken: [
-                '[CHECKED] Electrocardiogram waveform sinus rhythm confirmed nominal.',
-                '[CHECKED] Core temperature within thermo-neutral equilibrium (36.8 - 37.3°C).',
-            ],
-            recommendedAction: 'Continue nominal mission EVA timeline and physiological monitoring.',
-        });
-    }
-
-    const logs: TelemetryLogItem[] = [
-        {
-            id: `log-${Date.now()}-1`,
-            timestamp: timeStr,
-            title: `Telemetry Profile Loaded: ${name}`,
-            action: `[SYSTEM] Synchronized telemetry for ${id} (${country}) - Duration: ${missionDays}d`,
-            status: 'RESOLVED',
-        },
-        {
-            id: `log-${Date.now()}-2`,
-            timestamp: timeStr.slice(0, 5) + ':02',
-            title: 'Biosensor Array Synced',
-            action: `[DIAGNOSTIC] Heart rate (${hr} bpm) and SpO2 (${spo2}%) linked to DSN channel`,
-            status: 'RESOLVED',
-        },
-        {
-            id: `log-${Date.now()}-3`,
-            timestamp: timeStr.slice(0, 5) + ':00',
-            title: 'EVA Suit Link Verified',
-            action: `[TELEMETRY] Internal pressure ${suitPressurePsi} psi, battery cell ${batteryPercent}%`,
-            status: 'RESOLVED',
-        },
-    ];
+    const logs: TelemetryLogItem[] = [];
 
     return {
         bio: {
@@ -378,9 +271,15 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isSuitModalOpen, setIsSuitModalOpen] = useState(false);
     const [isBiometricsModalOpen, setIsBiometricsModalOpen] = useState(false);
-    const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isCrewSwitcherOpen, setIsCrewSwitcherOpen] = useState(false);
+    const [isSelfAssessmentOpen, setIsSelfAssessmentOpen] = useState(false);
+    const [selfAssessmentResult, setSelfAssessmentResult] = useState<{
+        score: number;
+        status: 'NOMINAL' | 'GUARDED' | 'ELEVATED' | 'CRITICAL';
+        flags: string[];
+        alertMessage: string;
+    } | null>(null);
 
     // EVA status selector dropdown state
     const [isEvaSelectorOpen, setIsEvaSelectorOpen] = useState(false);
@@ -396,14 +295,6 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     const [isAudioAlertsEnabled, setIsAudioAlertsEnabled] = useState(true);
     const [tempUnit, setTempUnit] = useState<'C' | 'F'>('C');
     const [pressureUnit, setPressureUnit] = useState<'psi' | 'kPa'>('psi');
-
-    // Interactive alert checklist items state
-    const [actionCheckedState, setActionCheckedState] = useState<Record<string, boolean>>({
-        '0-0': true,
-        '0-1': true,
-        '1-0': true,
-        '1-1': true,
-    });
 
     // Live clock
     const [currentTimeStr, setCurrentTimeStr] = useState('13:45:10 UTC');
@@ -624,14 +515,6 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     const handleSelectAstronaut = (record: any) => {
         const profile = generateAstronautProfile(record, currentTimeStr);
         setActiveAstronaut(profile);
-
-        const initialChecks: Record<string, boolean> = {};
-        profile.alerts.forEach((alert, aIdx) => {
-            alert.actionsTaken.forEach((_, actIdx) => {
-                initialChecks[`${aIdx}-${actIdx}`] = true;
-            });
-        });
-        setActionCheckedState(initialChecks);
         toast.info(`Active Crew Member: ${profile.bio.name} (${profile.bio.id})`);
     };
 
@@ -641,6 +524,7 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
             const elenaDb = crewList.find(
                 (c) =>
                     String(c.Astronaut).toUpperCase() === 'AST-00' ||
+                    String(c.Name).toLowerCase().includes('reid wiseman') ||
                     String(c.Name).toLowerCase().includes('elena rovani')
             );
             if (elenaDb) {
@@ -661,24 +545,6 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
         setIsEvaSelectorOpen(false);
         handleAddManualLog(`EVA State Changed to ${status}`, `[FLIGHT SURGEON] Updated operational EVA state to ${status}`);
         toast.info(`EVA Status: ${status}`);
-    };
-
-    // Toggle checklist item
-    const handleToggleChecklist = (key: string, label: string) => {
-        const next = !actionCheckedState[key];
-        setActionCheckedState((prev) => ({
-            ...prev,
-            [key]: next,
-        }));
-        const actionText = next ? `[VERIFIED] ${label}` : `[PENDING] ${label}`;
-        handleAddManualLog('Checklist Status Shift', actionText);
-        toast.success(next ? `Acknowledged: ${label}` : `Action un-checked: ${label}`);
-    };
-
-    // Transmit directive to crew
-    const handleTransmitDirective = (directiveText: string) => {
-        handleAddManualLog('Radio Directive to Crew', `[VOX COMM] Sent: "${directiveText}"`);
-        toast.success(`Directive transmitted to ${activeAstronaut.bio.name}`);
     };
 
     // Diagnostics progress bar click test
@@ -713,8 +579,8 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
 
                     <div>
                         <div className="flex items-center gap-1.5 font-mono">
-                            <span className="font-bold text-white text-xs sm:text-sm tracking-wider">NASA AHMS</span>
-                            <span className="text-[10px] text-cyan-400 font-bold hidden sm:inline">// HUD</span>
+                            <span className="font-bold text-white text-xs sm:text-sm tracking-wider">ORBIT</span>
+                            <span className="text-[10px] text-cyan-400 font-bold hidden sm:inline">// NASA HRP</span>
                         </div>
                     </div>
 
@@ -819,24 +685,29 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                             <span className="hidden xl:inline">Suit</span>
                         </button>
 
-                        <button
-                            type="button"
-                            onClick={() => setIsLogsModalOpen(true)}
-                            className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-[#132c4a] transition-colors text-[11px] flex items-center gap-1"
-                            title="Full Mission Event Logs"
-                        >
-                            <ClipboardList className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">Logs</span>
-                        </button>
-
                         <Link
                             href="/dataset"
                             className="px-2 py-1 rounded text-[#5cdbdf] hover:text-white hover:bg-[#132c4a] transition-colors text-[11px] flex items-center gap-1 font-bold"
-                            title="Open Full Kaggle Spaceflight Physiological Dataset Archive"
+                            title="Open NASA Human Research Program (HRP) 5 Hazards & Telemetry Archive"
                         >
                             <Database className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">Dataset ({effectiveCrewList.length})</span>
+                            <span className="hidden xl:inline">5 Hazards ({effectiveCrewList.length})</span>
                         </Link>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="px-2.5 py-1 rounded text-cyan-300 hover:text-white bg-cyan-950/70 border border-cyan-700 hover:border-cyan-400 transition-colors text-[11px] flex items-center gap-1 font-bold shadow-[0_0_8px_rgba(6,182,212,0.15)] cursor-pointer"
+                            title="Open NASA 5 Hazards Autonomous Self-Assessment & Action Suite"
+                        >
+                            <Shield className="w-3 h-3 text-[#5cdbdf]" />
+                            <span className="hidden xl:inline">Self-Assessment</span>
+                            {selfAssessmentResult && (
+                                <span className="ml-0.5 px-1 py-0.2 text-[9px] rounded bg-cyan-900 text-cyan-200">
+                                    {selfAssessmentResult.score}%
+                                </span>
+                            )}
+                        </button>
 
                         <button
                             type="button"
@@ -852,8 +723,8 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                     <div className="flex items-center gap-1">
                         <Link
                             href="/dataset"
-                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all shadow-sm"
-                            title="Open Kaggle Dataset Archive"
+                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all shadow-sm flex items-center gap-1"
+                            title="Open NASA 5 Hazards & Telemetry Archive"
                         >
                             <Database className="w-3.5 h-3.5" />
                         </Link>
@@ -905,6 +776,110 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                     </div>
                 </div>
             </header>
+
+            {/* NASA HUMAN RESEARCH PROGRAM (HRP) 5 HAZARDS AUTONOMOUS MONITOR STRIP (R.I.D.G.E.) */}
+            <div className="relative z-10 rounded-xl border border-[#132c4a] bg-[#06121e]/90 p-2.5 shadow-lg font-mono">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#0a1f2e] border border-[#1a4b6c] text-[#5cdbdf] text-[11px] font-bold">
+                            <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                            <span>NASA 5 HAZARDS (R.I.D.G.E.)</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 hidden xl:inline">
+                            Autonomous Astronaut Health & Countermeasures
+                        </span>
+                    </div>
+
+                    {/* 5 Hazard Live Indicator Quick Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 flex-1 max-w-4xl">
+                        {/* R - Radiation */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-amber-400/70 transition-all text-left group cursor-pointer"
+                            title="Space Radiation: Dosimetry, GCR & SPE acute risk"
+                        >
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-amber-400 group-hover:text-amber-300">[R] RADIATION</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            </div>
+                            <div className="text-[10px] text-slate-300 truncate font-semibold">0.18 mSv/h • Safe</div>
+                            <div className="text-[9px] text-slate-400 truncate">Storm Haven: Ready</div>
+                        </button>
+
+                        {/* I - Isolation */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-purple-400/70 transition-all text-left group cursor-pointer"
+                            title="Isolation & Confinement: Circadian Rhythms & Cognitive Alertness"
+                        >
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-purple-400 group-hover:text-purple-300">[I] ISOLATION</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            </div>
+                            <div className="text-[10px] text-slate-300 truncate font-semibold">Circadian: Phase 1</div>
+                            <div className="text-[9px] text-slate-400 truncate">Sleep: 84% • SSLA Active</div>
+                        </button>
+
+                        {/* D - Distance */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-sky-400/70 transition-all text-left group cursor-pointer"
+                            title="Distance from Earth: Autonomous Triage & 14-min DSN Latency"
+                        >
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-sky-400 group-hover:text-sky-300">[D] DISTANCE</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                            </div>
+                            <div className="text-[10px] text-slate-300 truncate font-semibold">DSN Delay: 14m 22s</div>
+                            <div className="text-[9px] text-slate-400 truncate">Autonomous CDS: Active</div>
+                        </button>
+
+                        {/* G - Gravity */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-rose-400/70 transition-all text-left group cursor-pointer"
+                            title="Gravity Fields: Bone Loss, Muscle Atrophy & SANS Fluid Shift"
+                        >
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-rose-400 group-hover:text-rose-300">[G] GRAVITY</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            </div>
+                            <div className="text-[10px] text-slate-300 truncate font-semibold">Bone: {activeAstronaut.bio.boneDensityLoss}</div>
+                            <div className="text-[9px] text-slate-400 truncate">ARED & LBNP: Ready</div>
+                        </button>
+
+                        {/* E - Environment */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-emerald-400/70 transition-all text-left group cursor-pointer"
+                            title="Hostile Environment: ECLSS CO2, Microbes & Life Support"
+                        >
+                            <div className="flex items-center justify-between text-[10px]">
+                                <span className="font-bold text-emerald-400 group-hover:text-emerald-300">[E] ENVIRONMENT</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            </div>
+                            <div className="text-[10px] text-slate-300 truncate font-semibold">ECLSS pCO2: 2.8 mmHg</div>
+                            <div className="text-[9px] text-slate-400 truncate">Air Quality: Nominal</div>
+                        </button>
+                    </div>
+
+                    {/* Self-Assessment Quick Trigger */}
+                    <button
+                        type="button"
+                        onClick={() => setIsSelfAssessmentOpen(true)}
+                        className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#0284c7] to-[#0ea5e9] hover:from-[#0369a1] hover:to-[#0284c7] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-[0_0_12px_rgba(14,165,233,0.3)] shrink-0 cursor-pointer"
+                    >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>EVALUATE & ACT</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            </div>
 
             {/* MAIN 3-COLUMN MISSION CONTROL COCKPIT */}
             <div className="relative z-10 grid grid-cols-12 gap-3.5 flex-1">
@@ -1001,79 +976,9 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                 </div>
 
                 {/* ------------------------------------------------------------- */}
-                {/* RIGHT COLUMN: Clinical Alerts, Suit Systems & Incident Events  */}
+                {/* RIGHT COLUMN: Suit Life Support & ORBIT 5-Hazards Radar      */}
                 {/* ------------------------------------------------------------- */}
                 <div className="col-span-12 lg:col-span-3 flex flex-col gap-3 font-mono">
-                    {/* Active Clinical Conditions & Directives */}
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg">
-                        <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2.5">
-                            <div className="flex items-center gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                                <h2 className="text-xs font-bold tracking-wider text-white">CLINICAL ALERTS</h2>
-                            </div>
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-950/80 text-amber-300 border border-amber-800">
-                                {activeAstronaut.alerts.length} ACTIVE
-                            </span>
-                        </div>
-
-                        <div className="space-y-2.5 max-h-[170px] overflow-y-auto pr-1">
-                            {activeAstronaut.alerts.map((alert, alertIdx) => {
-                                const isCritical = alert.level === 'CRITICAL' || alert.level === 'WARNING';
-                                return (
-                                    <div
-                                        key={alertIdx}
-                                        className={`rounded-lg border p-2.5 text-xs space-y-2 ${
-                                            isCritical
-                                                ? 'border-amber-500/40 bg-amber-950/20'
-                                                : 'border-[#132c4a] bg-[#0a1f2e]'
-                                        }`}
-                                    >
-                                        <div className={`font-bold flex items-center justify-between text-[11px] ${
-                                            isCritical ? 'text-amber-400' : 'text-[#5cdbdf]'
-                                        }`}>
-                                            <span className="truncate">{alert.title}</span>
-                                            {isCritical && <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 ml-1" />}
-                                        </div>
-
-                                        {/* Action Checklist */}
-                                        <div className="space-y-1 text-[10px]">
-                                            {alert.actionsTaken.map((act, actIdx) => {
-                                                const itemKey = `${alertIdx}-${actIdx}`;
-                                                const isChecked = actionCheckedState[itemKey] ?? true;
-                                                return (
-                                                    <div
-                                                        key={actIdx}
-                                                        onClick={() => handleToggleChecklist(itemKey, act)}
-                                                        className="flex items-start gap-1.5 text-slate-300 hover:text-white cursor-pointer group"
-                                                    >
-                                                        {isChecked ? (
-                                                            <CheckSquare className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
-                                                        ) : (
-                                                            <Square className="w-3 h-3 text-slate-500 shrink-0 mt-0.5" />
-                                                        )}
-                                                        <span className={isChecked ? 'text-slate-300' : 'text-slate-500 line-through'}>
-                                                            {act}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {/* Directive Transmission */}
-                                        <button
-                                            type="button"
-                                            onClick={() => handleTransmitDirective(alert.recommendedAction)}
-                                            className="w-full flex items-center justify-center gap-1.5 py-1 px-2.5 rounded bg-[#0a1f2e] border border-[#5cdbdf] text-[#5cdbdf] hover:bg-[#5cdbdf] hover:text-black transition-all cursor-pointer text-[10px] font-bold"
-                                        >
-                                            <Send className="w-2.5 h-2.5" />
-                                            <span>TRANSMIT DIRECTIVE</span>
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
                     {/* Suit & Environmental Life Support */}
                     <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg">
                         <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2.5">
@@ -1123,35 +1028,82 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                         </div>
                     </div>
 
-                    {/* Recent Incident Events Feed */}
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg flex-1 flex flex-col">
-                        <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2">
-                            <div className="flex items-center gap-1.5">
-                                <ClipboardList className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                <h2 className="text-xs font-bold tracking-wider text-white">EVENT LOGS</h2>
+                    {/* ORBIT 5-HAZARDS BIOMEDICAL RADAR */}
+                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg flex-1 flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2.5">
+                                <div className="flex items-center gap-1.5">
+                                    <Activity className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                                    <h2 className="text-xs font-bold tracking-wider text-white">ORBIT 5-HAZARD STATUS</h2>
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800">
+                                    R.I.D.G.E.
+                                </span>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsLogsModalOpen(true)}
-                                className="text-[10px] text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5"
-                            >
-                                <span>Archive</span>
-                                <ArrowUpRight className="w-3 h-3" />
-                            </button>
+
+                            <div className="space-y-2 text-[11px]">
+                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-amber-400 text-[10px]">[R] SPACE RADIATION</div>
+                                        <div className="text-slate-300 text-[11px]">0.18 mSv/h • Safe Threshold</div>
+                                    </div>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                        SHIELDED
+                                    </span>
+                                </div>
+
+                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-purple-400 text-[10px]">[I] ISOLATION & CONFINEMENT</div>
+                                        <div className="text-slate-300 text-[11px]">Sleep: 84% • Circadian Sync</div>
+                                    </div>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
+                                        SSLA ON
+                                    </span>
+                                </div>
+
+                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-sky-400 text-[10px]">[D] DISTANCE FROM EARTH</div>
+                                        <div className="text-slate-300 text-[11px]">DSN Delay: 14m 22s Latency</div>
+                                    </div>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">
+                                        CDS ACTIVE
+                                    </span>
+                                </div>
+
+                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-rose-400 text-[10px]">[G] GRAVITY FIELDS</div>
+                                        <div className="text-slate-300 text-[11px]">Bone: {activeAstronaut.bio.boneDensityLoss} • SANS Check</div>
+                                    </div>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                                        ARED READY
+                                    </span>
+                                </div>
+
+                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
+                                    <div>
+                                        <div className="font-bold text-emerald-400 text-[10px]">[E] HOSTILE ENVIRONMENT</div>
+                                        <div className="text-slate-300 text-[11px]">ECLSS pCO2: 2.8 mmHg • Nominal</div>
+                                    </div>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                        PURGED
+                                    </span>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto space-y-2 text-xs pr-1 max-h-[140px]">
-                            {activeAstronaut.logs.slice(0, 4).map((item, i) => (
-                                <div key={item.id || i} className="p-1.5 rounded bg-[#0a1f2e]/60 border border-[#132c4a] text-[11px] space-y-0.5">
-                                    <div className="text-white font-bold flex items-center justify-between">
-                                        <span className="truncate">{item.timestamp} - {item.title}</span>
-                                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950/70 text-emerald-400 border border-emerald-800 shrink-0">
-                                            {item.status || 'OK'}
-                                        </span>
-                                    </div>
-                                    <div className="text-slate-400 text-[10px] truncate">{item.action}</div>
-                                </div>
-                            ))}
+                        {/* Action Buttons */}
+                        <div className="pt-3 border-t border-[#132c4a] mt-3 space-y-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsSelfAssessmentOpen(true)}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white font-bold text-xs transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] cursor-pointer"
+                            >
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>EVALUATE & ACT ON HEALTH</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1332,14 +1284,6 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                 }}
             />
 
-            {/* Mission Logs Modal */}
-            <MissionLogsModal
-                isOpen={isLogsModalOpen}
-                onClose={() => setIsLogsModalOpen(false)}
-                logs={activeAstronaut.logs}
-                onAddLog={handleAddManualLog}
-            />
-
             {/* System Settings Modal */}
             <SystemSettingsModal
                 isOpen={isSettingsModalOpen}
@@ -1350,6 +1294,37 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                 onChangeTempUnit={setTempUnit}
                 pressureUnit={pressureUnit}
                 onChangePressureUnit={setPressureUnit}
+            />
+
+            {/* NASA 5 Hazards Autonomous Self-Assessment & Action Modal */}
+            <AstronautSelfAssessmentModal
+                isOpen={isSelfAssessmentOpen}
+                onClose={() => setIsSelfAssessmentOpen(false)}
+                astronaut={activeAstronaut}
+                onActionExecuted={(actionTitle, details) => {
+                    handleAddManualLog(actionTitle, `[AUTONOMOUS COUNTERMEASURE] ${details}`);
+                }}
+                onSaveAssessment={(result) => {
+                    setSelfAssessmentResult(result);
+                    handleAddManualLog(
+                        `Autonomous Health Index: ${result.score}/100 (${result.status})`,
+                        `[SELF-ASSESSMENT] ${result.flags.join('; ') || 'All 5 spaceflight hazards within nominal tolerance.'}`
+                    );
+                    if (result.flags.length > 0) {
+                        setActiveAstronaut((prev) => ({
+                            ...prev,
+                            alerts: [
+                                {
+                                    level: result.status === 'CRITICAL' ? 'CRITICAL' : 'WARNING',
+                                    title: `ASTRONAUT SELF-SPOTTED HAZARD DEVIATION (AHHI: ${result.score}/100)`,
+                                    actionsTaken: result.flags.map((f) => `[SELF-REPORT] ${f}`),
+                                    recommendedAction: 'Execute corresponding countermeasure in the 5 Hazards Action Suite.',
+                                },
+                                ...prev.alerts.filter((a) => !a.title.includes('SELF-SPOTTED')),
+                            ],
+                        }));
+                    }
+                }}
             />
         </div>
     );

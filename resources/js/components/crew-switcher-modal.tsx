@@ -94,7 +94,7 @@ export default function CrewSwitcherModal({
                         </div>
                         <div>
                             <h2 className="text-sm sm:text-base font-bold text-white tracking-wider flex items-center gap-2">
-                                <span>NASA AHMS // CREW ROSTER SELECTION</span>
+                                <span>ORBIT // CREW ROSTER SELECTION</span>
                             </h2>
                             <p className="text-[11px] text-slate-400 tracking-wider">
                                 SWITCH ACTIVE TELEMETRY CHANNEL • LIVE DSN SYNCHRONIZATION
@@ -261,7 +261,7 @@ export default function CrewSwitcherModal({
                 {/* Footer status */}
                 <div className="border-t border-[#1a4b6c] pt-3 mt-3 flex items-center justify-between text-[11px] text-slate-500">
                     <div>
-                        NASA AHMS • BIOMEDICAL TELEMETRY ROTATION PROTOCOL
+                        ORBIT • BIOMEDICAL TELEMETRY ROTATION PROTOCOL
                     </div>
                     <button
                         onClick={onClose}

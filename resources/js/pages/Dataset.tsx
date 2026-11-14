@@ -32,11 +32,47 @@ import {
     Check,
     CheckSquare,
     Square,
+    Zap,
+    Moon,
+    Compass,
+    Orbit,
+    Biohazard,
+    ExternalLink,
+    Info,
+    ShieldAlert,
+    Layers,
 } from 'lucide-react';
 import NasaLogo from '@/components/nasa-logo';
 import TelemetryImportModal from '@/components/telemetry-import-modal';
 import type { ParsedImportPayload } from '@/types/astronaut';
 import { toast } from 'sonner';
+
+export interface NasaHazardItem {
+    id: number;
+    hazard_code: string; // 'R' | 'I' | 'D' | 'G' | 'E'
+    hazard_id: string;   // 'HAZ-01' to 'HAZ-05'
+    title: string;
+    tagline?: string;
+    icon?: string;
+    category?: string;
+    description: string;
+    deep_space_context?: string;
+    key_risks?: string[];
+    biomedical_metrics?: Array<{
+        metric: string;
+        nominal: string;
+        critical: string;
+        unit: string;
+    }>;
+    countermeasures?: Array<{
+        name: string;
+        status: string;
+        desc: string;
+    }>;
+    hrp_elements?: string[];
+    nasa_url: string;
+    severity_level: string;
+}
 
 export interface DatasetRecordItem {
     id?: number;
@@ -55,15 +91,191 @@ export interface DatasetRecordItem {
     Psychological_Impact_Score?: number;
     Vision_Change?: string;
     Countermeasures_Used?: string;
+    Hazard_Focus?: string;
+    Risk_Level?: string;
+    NASA_HRP_Protocol?: string;
 }
 
 interface DatasetProps {
     records: DatasetRecordItem[];
+    hazards?: NasaHazardItem[];
 }
 
-export default function Dataset({ records = [] }: DatasetProps) {
+// Fallback official NASA Human Research Program 5 Hazards Data (https://www.nasa.gov/hrp/hazards/)
+const DEFAULT_NASA_HAZARDS: NasaHazardItem[] = [
+    {
+        id: 1,
+        hazard_code: 'R',
+        hazard_id: 'HAZ-01',
+        title: 'Space Radiation',
+        tagline: 'Invisible ionizing particle flux beyond Earth’s protective magnetosphere',
+        icon: 'Zap',
+        category: 'Deep Space Environment',
+        description: "Above Earth's atmosphere and protective magnetic field, astronauts are exposed to galactic cosmic rays (GCR) from outside the solar system and solar particle events (SPE) from solar coronal mass ejections. Deep space radiation consists of high-energy protons and heavy atomic nuclei (HZE ions) that easily penetrate spacecraft aluminum hull shielding and human biological tissue.",
+        deep_space_context: "On a 3-year round trip to Mars or deep space lunar missions (Artemis/Gateway), astronauts will encounter cumulative radiation doses up to 100 times higher than typical background radiation on Earth, drastically elevating lifetime cancer mortality and CNS impairment.",
+        key_risks: [
+            'Increased lifetime risk of exposure-induced death (REID) from lethal carcinomas and leukemia',
+            'Damage to the Central Nervous System (CNS) causing cognitive deceleration, memory deficits, and motor decrements',
+            'Acute Radiation Sickness (ARS) during high-energy Solar Particle Events (nausea, fatigue, lymphocyte depletion)',
+            'Degenerative tissue changes including premature cataractogenesis, cardiovascular endothelial damage, and accelerated arterial stiffening',
+        ],
+        biomedical_metrics: [
+            { metric: 'ISS Ambient Dosimetry', nominal: '0.3 - 0.5 mSv/day', critical: '> 1.0 mSv/day', unit: 'mSv/day' },
+            { metric: 'Deep Space / Mars Transit', nominal: '1.0 - 1.8 mSv/day', critical: '> 5.0 mSv/day', unit: 'mSv/day' },
+            { metric: 'Solar Particle Event (SPE)', nominal: '< 50 mSv/event', critical: '> 250 mSv/event', unit: 'mSv' },
+            { metric: 'Career REID Ceiling', nominal: '< 3.0% mean risk', critical: '≥ 3.0% threshold', unit: '% REID' },
+        ],
+        countermeasures: [
+            { name: 'Hydrogen-Rich Polyethylene & Water Wall Shielding', status: 'Deployed on Orion & Gateway', desc: 'Spacecraft architecture incorporates water storage bladders and low-Z polymer linings to absorb secondary neutron recoil.' },
+            { name: 'Solar Storm Haven Configuration', status: 'Operational Protocol', desc: 'During intense coronal mass ejections, crew retreats to innermost fortified equipment lockers surrounded by food and water supplies.' },
+            { name: 'Active Crew Dosimetry & Fast Neutron Spectrometers', status: 'Active Monitoring', desc: 'Continuous wearable silicon semiconductor sensors (CPDS/BIRD) providing real-time absorbed dose rate alarms to flight surgeons.' },
+            { name: 'Biomedical Radioprotectants & Antioxidant Formulations', status: 'Clinical Research', desc: 'Targeted pharmaceutical scavenging of reactive oxygen species (ROS) and DNA repair up-regulators.' },
+        ],
+        hrp_elements: ['Space Radiation Element (SR)', 'Human Health Countermeasures (HHC)'],
+        nasa_url: 'https://www.nasa.gov/hrp/hazards/',
+        severity_level: 'CRITICAL',
+    },
+    {
+        id: 2,
+        hazard_code: 'I',
+        hazard_id: 'HAZ-02',
+        title: 'Isolation and Confinement',
+        tagline: 'Psychological and circadian strain of living in cramped habitats with small crews',
+        icon: 'Moon',
+        category: 'Behavioral Health & Performance',
+        description: "Expedition crews are confined to tight habitable modules for months or years, completely isolated from family, friends, natural terrestrial sensory variety, and Earth's normal day-night cycle. The psychological friction of prolonged confinement is one of the highest human risks for deep space transit.",
+        deep_space_context: "During an extended Mars mission lasting ~1,000 days, astronauts cannot step outside, have no real-time voice calls with loved ones due to distance latency, and must maintain flawless cooperative team dynamics under high-consequence operational pressure.",
+        key_risks: [
+            'Severe circadian rhythm desynchronization, chronic sleep debt, and insomnia',
+            'Psychological fatigue, depressive/affective episodes, and motivational decline',
+            'Interpersonal tension, crew-ground communication friction, and team cohesion breakdown',
+            'Impaired psychomotor vigilance, increased operational error rate, and attentional tunneling',
+        ],
+        biomedical_metrics: [
+            { metric: 'Actigraphy Sleep Duration', nominal: '≥ 7.5 hrs/night', critical: '< 6.0 hrs/night', unit: 'hours' },
+            { metric: 'Sleep Efficiency Index', nominal: '≥ 85%', critical: '< 75%', unit: '%' },
+            { metric: 'PVT (Psychomotor Vigilance) Lapses', nominal: '0 - 1 lapse', critical: '≥ 4 lapses', unit: 'count' },
+            { metric: 'Circadian Phase Angle Shift', nominal: '± 30 mins', critical: '> 90 mins', unit: 'minutes' },
+        ],
+        countermeasures: [
+            { name: 'Solid-State Dynamic Spectrum Lighting (SSLA)', status: 'Deployed on ISS', desc: 'Circadian-adjusted blue-enriched LED illumination during morning shifts for alertness, shifting to red-spectrum dimming at night for melatonin synthesis.' },
+            { name: 'Mandatory 8-Hour Protected Sleep Schedule', status: 'Mission Rule', desc: 'Strict flight rule adherence prohibiting work intrusions into circadian rest periods with sound-attenuated private quarters.' },
+            { name: 'Earth-Ambient VR & Olfactory Nature Stimulation', status: 'Under Testing', desc: 'Immersive sensory stimulation simulations restoring visual, acoustic, and olfactory exposure to natural terrestrial environments.' },
+            { name: 'Autonomous Behavioral Health & Mood Tracking', status: 'Active Protocol', desc: 'Standardized computerized cognitive battery and voice stress acoustic analysis for early intervention.' },
+        ],
+        hrp_elements: ['Behavioral Health & Performance (BHP)', 'Human Factors & Behavioral Performance (HFBP)'],
+        nasa_url: 'https://www.nasa.gov/hrp/hazards/',
+        severity_level: 'HIGH',
+    },
+    {
+        id: 3,
+        hazard_code: 'D',
+        hazard_id: 'HAZ-03',
+        title: 'Distance from Earth',
+        tagline: 'Extreme distance, communication time delay, and the requirement for clinical autonomy',
+        icon: 'Compass',
+        category: 'Autonomous Exploration Operations',
+        description: "As astronauts venture toward the Moon (240,000 miles) and Mars (up to 140-250 million miles), immediate abort to Earth and emergency evacuation become physically impossible. Radio communications experience speed-of-light delays up to 22 minutes each direction, requiring crews to solve complex medical emergencies autonomously.",
+        deep_space_context: "If an astronaut develops acute surgical abdomen (e.g. appendicitis), cardiac arrhythmia, or trauma during Mars transit, Mission Control flight surgeons in Houston cannot provide real-time guidance. The crew and onboard AI must independently diagnose and treat.",
+        key_risks: [
+            'Communication latency up to 44 minutes round-trip preventing real-time Earth medical consultation',
+            'Inability to evacuate ill or injured crew members or receive emergency medical supply flights',
+            'Accelerated degradation and shelf-life expiration of pharmaceuticals exposed to cosmic radiation',
+            'Misdiagnosis or procedural errors during high-stress autonomous clinical procedures',
+        ],
+        biomedical_metrics: [
+            { metric: 'One-Way Light Speed Comm Delay', nominal: '< 1.3 sec (Moon)', critical: '4 - 22 mins (Mars)', unit: 'mins' },
+            { metric: 'Round-Trip Telemedicine Latency', nominal: '< 3.0 sec', critical: '8 - 44 mins', unit: 'mins' },
+            { metric: 'Clinical Autonomy Readiness Index', nominal: '≥ Level 4', critical: '< Level 3', unit: 'Level (1-5)' },
+            { metric: 'Medical Formulary Potency Retention', nominal: '≥ 90%', critical: '< 75%', unit: '% potency' },
+        ],
+        countermeasures: [
+            { name: 'Autonomous Medical Decision Support (ORBIT AI)', status: 'Active Architecture', desc: 'Clinical algorithmic guidance providing immediate differential diagnosis, surgical protocols, and pharmacology recommendations.' },
+            { name: 'Exploration Medical Capability (ExMC) System', status: 'In Development', desc: 'Compact modular ultrasound, blood electrolyte analyzers, automated intravenous fluid generators, and sterilization kits.' },
+            { name: 'Just-in-Time VR Procedural Clinical Training', status: 'Deployed for Deep Space', desc: 'Interactive virtual reality clinical refreshers allowing astronauts to review emergency procedures immediately before intervention.' },
+            { name: 'Radiation-Shielded Pharmaceutical Containment', status: 'Under Qualification', desc: 'Hermetically sealed, temperature-regulated, heavy-shielded formulary pods prolonging drug chemical stability.' },
+        ],
+        hrp_elements: ['Exploration Medical Capability (ExMC)'],
+        nasa_url: 'https://www.nasa.gov/hrp/hazards/',
+        severity_level: 'CRITICAL',
+    },
+    {
+        id: 4,
+        hazard_code: 'G',
+        hazard_id: 'HAZ-04',
+        title: 'Gravity Fields (Altered Gravity)',
+        tagline: 'Transitions between 0g weightlessness, Moon 1/6g, Mars 3/8g, and Earth 1g',
+        icon: 'Orbit',
+        category: 'Physiological Countermeasures',
+        description: "Astronauts experience dramatic gravitational shifts: high-g launch acceleration, continuous microgravity (0g) during transit, partial gravity on the Moon (1/6g) or Mars (3/8g), and abrupt hypergravity during atmospheric entry. Prolonged unloading causes systemic musculoskeletal deconditioning, fluid redistribution, and cardiovascular atrophy.",
+        deep_space_context: "Without constant gravity pulling bodily fluids toward the feet, ~2 liters of interstitial fluid shifts cephalad (headward), expanding the optic nerve sheath and causing SANS (Spaceflight-Associated Neuro-ocular Syndrome). Bones shed calcium into urine, increasing kidney stone risk and fragility fractures.",
+        key_risks: [
+            'Progressive bone mineral density (BMD) loss of 1.0% to 1.5% per month in weight-bearing skeleton',
+            'Disuse muscular atrophy with fast-to-slow muscle fiber transition and loss of postural torque',
+            'Spaceflight-Associated Neuro-ocular Syndrome (SANS): optic disc edema, globe flattening, hyperopic vision shift',
+            'Orthostatic intolerance and neurovascular syncope upon landing in planetary gravity',
+            'Vestibular and sensorimotor ataxia, space motion sickness, and spatial disorientation',
+        ],
+        biomedical_metrics: [
+            { metric: 'Monthly BMD Loss (Weight-Bearing)', nominal: '< -0.8% / mo', critical: '≥ -1.5% / mo', unit: '%/month' },
+            { metric: 'Optic Nerve Sheath Diameter (ONSD)', nominal: '4.5 - 5.5 mm', critical: '> 5.8 mm (SANS)', unit: 'mm' },
+            { metric: 'Calf Muscle Cross-Sectional Area', nominal: '< -3% loss', critical: '> -8% loss', unit: '% loss' },
+            { metric: 'Post-Landing Orthostatic Heart Rate Delta', nominal: '< 25 bpm spike', critical: '≥ 35 bpm (syncope risk)', unit: 'bpm' },
+        ],
+        countermeasures: [
+            { name: 'Advanced Resistive Exercise Device (ARED)', status: 'Operational ISS Gold Standard', desc: 'High-load vacuum cylinder resistance training delivering up to 600 lbs of load daily to mimic heavy 1g squats and deadlifts.' },
+            { name: 'T2 Treadmill & Cycle Ergometer with Vibration Isolation (CEVIS)', status: 'Daily Operational Requirement', desc: 'Aerobic cardiovascular conditioning maintaining VO2 max, stroke volume, and arterial baroreflex sensitivity.' },
+            { name: 'Lower Body Negative Pressure (LBNP) Suits', status: 'Clinical Validation', desc: 'Suction chambers pulling pooled headward fluids back into the lower pelvis and legs to reverse SANS intracranial hypertension.' },
+            { name: 'Bisphosphonate Therapy & Fluid Loading Protocol', status: 'Standard Clinical Protocol', desc: 'Intravenous zoledronic acid preventing osteoclastic resorption combined with isotonic electrolyte rehydration before descent.' },
+        ],
+        hrp_elements: ['Human Health Countermeasures (HHC)'],
+        nasa_url: 'https://www.nasa.gov/hrp/hazards/',
+        severity_level: 'CRITICAL',
+    },
+    {
+        id: 5,
+        hazard_code: 'E',
+        hazard_id: 'HAZ-05',
+        title: 'Hostile and Closed Environments',
+        tagline: 'Hermetic life support ecology, recycled air/water, altered microbiome, and toxic regolith',
+        icon: 'Biohazard',
+        category: 'Habitability & Life Support Ecology',
+        description: "The spacecraft or extraterrestrial surface habitat is an artificial closed ecosystem. Astronauts continuously breathe recycled atmosphere and drink reclaimed condensation and urine. Mechanical systems, toxic trace contaminants, carbon dioxide accumulation, microbial mutations, and extraterrestrial regolith dust present constant threats.",
+        deep_space_context: "In a sealed module, common benign bacteria mutate to become more virulent or antibiotic-resistant while crew immune defenses weaken. Lunar and Martian regolith (fine, jagged, chemically reactive mineral dust) clings to EVA suits, abrades airlocks, and threatens pulmonary health.",
+        key_risks: [
+            'Carbon dioxide (pCO2) elevation causing hypercapnia, cognitive lethargy, headaches, and visual disturbances',
+            'Immune system dysregulation, T-cell suppression, and asymptomatic reactivation of latent viruses (EBV, VZV, CMV)',
+            'Microbiome shifts and acceleration of opportunistic microbial biofilm colonization on life support pipes',
+            'Pulmonary and ocular inflammation from fine abrasive extraterrestrial dust (lunar/Martian regolith)',
+            'Toxic trace volatile organic chemical buildup from habitat outgassing and life support malfunctions',
+        ],
+        biomedical_metrics: [
+            { metric: 'Cabin Carbon Dioxide Partial Pressure', nominal: '< 2.0 mmHg', critical: '≥ 3.0 mmHg (Toxicity)', unit: 'mmHg' },
+            { metric: 'Atmospheric Cabin Pressure', nominal: '14.7 psi (101.3 kPa)', critical: '< 10.2 psi (Hypoxia)', unit: 'psi' },
+            { metric: 'ECLSS Water Recycling Recovery Rate', nominal: '≥ 98.0%', critical: '< 90.0%', unit: '% recovery' },
+            { metric: 'Airborne Particulate Dust Concentration', nominal: '< 0.05 mg/m³', critical: '> 0.3 mg/m³', unit: 'mg/m³' },
+            { metric: 'Latent Viral Reactivation Shedding', nominal: 'Negative / Undetectable', critical: 'Positive High Titer', unit: 'copies/mL' },
+        ],
+        countermeasures: [
+            { name: 'ECLSS Regenerative Sabatier & Carbon Dioxide Scrubbing', status: 'Operational Station Subsystem', desc: 'Thermal catalytic Sabatier reactors and Rapid Cycling Amine (RCA) adsorbents recovering breathable oxygen from CO2.' },
+            { name: 'Trace Contaminant Control Subsystem (TCCS) & HEPA Filtration', status: 'Continuous Scrubbing', desc: 'High-temperature catalytic oxidizers and activated carbon beds eliminating volatile organic compounds and airborne spores.' },
+            { name: 'Electrostatic & Magnetic Regolith Mitigation Airlocks', status: 'Artemis Surface Hardware', desc: 'Active dust repelling shields and vacuum airlocks preventing toxic extraterrestrial dust intrusion into living quarters.' },
+            { name: 'Microbial DNA Rapid Sequencing & Potable Water Disinfection', status: 'Operational Biomolecular Sequencer', desc: 'Nanopore in-flight sequencing identifying bacterial mutations and silver-ion biocides preventing water pipeline biofilms.' },
+        ],
+        hrp_elements: ['Environmental Control and Life Support Systems (ECLSS)', 'Immunology Element'],
+        nasa_url: 'https://www.nasa.gov/hrp/hazards/',
+        severity_level: 'HIGH',
+    },
+];
+
+export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
     // Local editable records state
     const [localRecords, setLocalRecords] = useState<DatasetRecordItem[]>(records);
+
+    // Active NASA hazards dataset
+    const activeHazards = useMemo(() => {
+        return hazards && hazards.length > 0 ? hazards : DEFAULT_NASA_HAZARDS;
+    }, [hazards]);
 
     // Sync local records if Inertia server prop updates
     useEffect(() => {
@@ -76,6 +288,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGender, setSelectedGender] = useState<string>('all');
     const [selectedCountry, setSelectedCountry] = useState<string>('all');
+    const [selectedHazardFilter, setSelectedHazardFilter] = useState<string>('all');
     const [sortField, setSortField] = useState<string>('id');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
@@ -84,6 +297,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
 
     // Modals
     const [selectedAstronaut, setSelectedAstronaut] = useState<DatasetRecordItem | null>(null);
+    const [selectedHazardModal, setSelectedHazardModal] = useState<NasaHazardItem | null>(null);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isManualAddOpen, setIsManualAddOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -96,19 +310,22 @@ export default function Dataset({ records = [] }: DatasetProps) {
     const [manualForm, setManualForm] = useState({
         Astronaut: '',
         Name: '',
-        Age_at_mission_start: 38,
+        Age_at_mission_start: 45,
         Gender: 'Male',
         Country: 'USA / NASA',
         'Mission_duration(Days)': 180,
-        No_of_Mission: 1,
+        No_of_Mission: 2,
         Bone_Density_Loss: '-3.2%',
         Muscle_Mass_Loss: '2.5%',
         Radiation_Exposure: 95,
-        Cardiovascular_Risk_Score: 6,
-        Immune_Response_Suppression: 7.5,
-        Psychological_Impact_Score: 4,
+        Cardiovascular_Risk_Score: 4,
+        Immune_Response_Suppression: 6.5,
+        Psychological_Impact_Score: 3,
         Vision_Change: 'Clear',
         Countermeasures_Used: 'ARED Resistive Exercise, Bisphosphonates',
+        Hazard_Focus: 'Gravity Fields (G)',
+        Risk_Level: 'Nominal',
+        NASA_HRP_Protocol: 'NASA-STD-3001',
     });
 
     // Form state for Edit Record
@@ -128,6 +345,9 @@ export default function Dataset({ records = [] }: DatasetProps) {
         Psychological_Impact_Score: 4,
         Vision_Change: 'Clear',
         Countermeasures_Used: 'ARED Resistive Exercise, Bisphosphonates',
+        Hazard_Focus: 'Gravity Fields (G)',
+        Risk_Level: 'Nominal',
+        NASA_HRP_Protocol: 'NASA-STD-3001',
     });
 
     // Live UTC Clock
@@ -155,6 +375,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 setSelectedAstronaut(null);
+                setSelectedHazardModal(null);
                 setIsManualAddOpen(false);
                 setIsEditModalOpen(false);
                 setDeletingRecord(null);
@@ -184,6 +405,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                 maxDuration: 0,
                 avgAge: 0,
                 avgBoneLoss: -3.2,
+                avgRadiation: 105,
                 distinctCountries: 0,
             };
         }
@@ -193,6 +415,8 @@ export default function Dataset({ records = [] }: DatasetProps) {
         let totalAge = 0;
         let totalBoneLoss = 0;
         let validBoneLossCount = 0;
+        let totalRad = 0;
+        let validRadCount = 0;
 
         localRecords.forEach((r) => {
             const dur = Number(r['Mission_duration(Days)'] ?? (r as any).duration ?? (r as any).missionDurationDays ?? (r as any).Mission_duration) || 0;
@@ -209,6 +433,11 @@ export default function Dataset({ records = [] }: DatasetProps) {
                     validBoneLossCount++;
                 }
             }
+
+            if (r.Radiation_Exposure) {
+                totalRad += Number(r.Radiation_Exposure);
+                validRadCount++;
+            }
         });
 
         return {
@@ -217,6 +446,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
             maxDuration,
             avgAge: +(totalAge / localRecords.length).toFixed(1),
             avgBoneLoss: validBoneLossCount > 0 ? +(totalBoneLoss / validBoneLossCount).toFixed(2) : -3.2,
+            avgRadiation: validRadCount > 0 ? Math.round(totalRad / validRadCount) : 108,
             distinctCountries: countries.length || 1,
         };
     }, [localRecords, countries]);
@@ -229,8 +459,9 @@ export default function Dataset({ records = [] }: DatasetProps) {
                 const idStr = String(item.Astronaut ?? item.id ?? '').toLowerCase();
                 const nameStr = String(item.Name ?? '').toLowerCase();
                 const countryStr = String(item.Country ?? '').toLowerCase();
+                const hazardStr = String(item.Hazard_Focus ?? '').toLowerCase();
 
-                const matchesSearch = !q || nameStr.includes(q) || idStr.includes(q) || countryStr.includes(q);
+                const matchesSearch = !q || nameStr.includes(q) || idStr.includes(q) || countryStr.includes(q) || hazardStr.includes(q);
 
                 const matchesGender =
                     selectedGender === 'all' ||
@@ -240,7 +471,11 @@ export default function Dataset({ records = [] }: DatasetProps) {
                     selectedCountry === 'all' ||
                     (item.Country && item.Country.toLowerCase() === selectedCountry.toLowerCase());
 
-                return matchesSearch && matchesGender && matchesCountry;
+                const matchesHazard =
+                    selectedHazardFilter === 'all' ||
+                    (item.Hazard_Focus && item.Hazard_Focus.toLowerCase().includes(selectedHazardFilter.toLowerCase()));
+
+                return matchesSearch && matchesGender && matchesCountry && matchesHazard;
             })
             .sort((a, b) => {
                 let valA: any = '';
@@ -252,31 +487,35 @@ export default function Dataset({ records = [] }: DatasetProps) {
                         valB = Number(b.Astronaut ?? b.id ?? 0);
                         break;
                     case 'name':
-                        valA = a.Name || '';
-                        valB = b.Name || '';
+                        valA = (a.Name || '').toLowerCase();
+                        valB = (b.Name || '').toLowerCase();
                         break;
                     case 'age':
-                        valA = Number(a.Age_at_mission_start ?? (a as any).age ?? (a as any).Age) || 0;
-                        valB = Number(b.Age_at_mission_start ?? (b as any).age ?? (b as any).Age) || 0;
+                        valA = Number(a.Age_at_mission_start ?? (a as any).age ?? 0);
+                        valB = Number(b.Age_at_mission_start ?? (b as any).age ?? 0);
                         break;
                     case 'duration':
-                        valA = Number(a['Mission_duration(Days)'] ?? (a as any).duration ?? (a as any).missionDurationDays ?? (a as any).Mission_duration) || 0;
-                        valB = Number(b['Mission_duration(Days)'] ?? (b as any).duration ?? (b as any).missionDurationDays ?? (b as any).Mission_duration) || 0;
+                        valA = Number(a['Mission_duration(Days)'] ?? (a as any).duration ?? 0);
+                        valB = Number(b['Mission_duration(Days)'] ?? (b as any).duration ?? 0);
                         break;
                     case 'boneLoss':
                         valA = parseFloat(String(a.Bone_Density_Loss || '0').replace('%', ''));
                         valB = parseFloat(String(b.Bone_Density_Loss || '0').replace('%', ''));
                         break;
+                    case 'radiation':
+                        valA = Number(a.Radiation_Exposure ?? 0);
+                        valB = Number(b.Radiation_Exposure ?? 0);
+                        break;
                     default:
-                        valA = Number(a.Astronaut ?? 0);
-                        valB = Number(b.Astronaut ?? 0);
+                        valA = Number(a.Astronaut ?? a.id ?? 0);
+                        valB = Number(b.Astronaut ?? b.id ?? 0);
                 }
 
                 if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
                 if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
                 return 0;
             });
-    }, [localRecords, searchQuery, selectedGender, selectedCountry, sortField, sortOrder]);
+    }, [localRecords, searchQuery, selectedGender, selectedCountry, selectedHazardFilter, sortField, sortOrder]);
 
     const handleSort = (field: string) => {
         if (sortField === field) {
@@ -291,12 +530,13 @@ export default function Dataset({ records = [] }: DatasetProps) {
         setSearchQuery('');
         setSelectedGender('all');
         setSelectedCountry('all');
+        setSelectedHazardFilter('all');
         setSortField('id');
         setSortOrder('asc');
         toast.info('Telemetry dataset filters reset to default');
     };
 
-    // Selection handlers
+    // Row selection toggles
     const isAllSelected =
         filteredRecords.length > 0 &&
         filteredRecords.every((r) => selectedIds.includes(r.Astronaut ?? r.id ?? ''));
@@ -304,38 +544,34 @@ export default function Dataset({ records = [] }: DatasetProps) {
     const toggleSelectAll = () => {
         if (isAllSelected) {
             const currentIds = new Set(filteredRecords.map((r) => r.Astronaut ?? r.id ?? ''));
-            setSelectedIds(selectedIds.filter((id) => !currentIds.has(id)));
+            setSelectedIds((prev) => prev.filter((id) => !currentIds.has(id)));
         } else {
-            const newSet = new Set(selectedIds);
-            filteredRecords.forEach((r) => {
-                const id = r.Astronaut ?? r.id;
-                if (id !== undefined) newSet.add(id);
-            });
-            setSelectedIds(Array.from(newSet));
+            const newIds = filteredRecords.map((r) => r.Astronaut ?? r.id ?? '');
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...newIds])));
         }
     };
 
-    const toggleSelectRow = (recordId: string | number) => {
-        if (selectedIds.includes(recordId)) {
-            setSelectedIds(selectedIds.filter((id) => id !== recordId));
-        } else {
-            setSelectedIds([...selectedIds, recordId]);
-        }
+    const toggleSelectRow = (id: string | number) => {
+        setSelectedIds((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+        );
     };
 
-    // CSV / JSON Exporters
+    // Export helpers
     const exportDataToCsv = (items: DatasetRecordItem[], filename: string) => {
         if (!items.length) {
-            toast.error('No dataset records available to export');
+            toast.warning('No records to export');
             return;
         }
+
         const headers = [
-            'Astronaut_ID',
+            'Astronaut',
             'Name',
-            'Age_at_Mission_Start',
+            'Age_at_mission_start',
             'Gender',
             'Country',
-            'Mission_Duration_Days',
+            'Mission_duration(Days)',
+            'No_of_Mission',
             'Bone_Density_Loss',
             'Muscle_Mass_Loss',
             'Radiation_Exposure',
@@ -344,29 +580,41 @@ export default function Dataset({ records = [] }: DatasetProps) {
             'Psychological_Impact_Score',
             'Vision_Change',
             'Countermeasures_Used',
+            'Hazard_Focus',
+            'Risk_Level',
+            'NASA_HRP_Protocol',
         ];
 
-        const rows = items.map((r) => [
-            r.Astronaut ?? r.id ?? '',
-            `"${(r.Name || '').replace(/"/g, '""')}"`,
-            r.Age_at_mission_start ?? '',
-            r.Gender ?? '',
-            `"${(r.Country || '').replace(/"/g, '""')}"`,
-            r['Mission_duration(Days)'] ?? '',
-            r.Bone_Density_Loss ?? '',
-            r.Muscle_Mass_Loss ?? '',
-            r.Radiation_Exposure ?? '',
-            r.Cardiovascular_Risk_Score ?? '',
-            r.Immune_Response_Suppression ?? '',
-            r.Psychological_Impact_Score ?? '',
-            `"${(r.Vision_Change || '').replace(/"/g, '""')}"`,
-            `"${(r.Countermeasures_Used || '').replace(/"/g, '""')}"`,
-        ]);
+        const csvRows = [
+            headers.join(','),
+            ...items.map((r) =>
+                [
+                    r.Astronaut ?? r.id ?? '',
+                    `"${(r.Name || '').replace(/"/g, '""')}"`,
+                    r.Age_at_mission_start ?? (r as any).age ?? '',
+                    `"${r.Gender || ''}"`,
+                    `"${(r.Country || '').replace(/"/g, '""')}"`,
+                    r['Mission_duration(Days)'] ?? (r as any).duration ?? '',
+                    r.No_of_Mission ?? 1,
+                    `"${r.Bone_Density_Loss || ''}"`,
+                    `"${r.Muscle_Mass_Loss || ''}"`,
+                    r.Radiation_Exposure ?? '',
+                    r.Cardiovascular_Risk_Score ?? '',
+                    r.Immune_Response_Suppression ?? '',
+                    r.Psychological_Impact_Score ?? '',
+                    `"${(r.Vision_Change || '').replace(/"/g, '""')}"`,
+                    `"${(r.Countermeasures_Used || '').replace(/"/g, '""')}"`,
+                    `"${(r.Hazard_Focus || '').replace(/"/g, '""')}"`,
+                    `"${(r.Risk_Level || '').replace(/"/g, '""')}"`,
+                    `"${(r.NASA_HRP_Protocol || '').replace(/"/g, '""')}"`,
+                ].join(',')
+            ),
+        ];
 
-        const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-        const encodedUri = encodeURI(csvContent);
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', encodedUri);
+        link.setAttribute('href', url);
         link.setAttribute('download', filename);
         document.body.appendChild(link);
         link.click();
@@ -375,12 +623,25 @@ export default function Dataset({ records = [] }: DatasetProps) {
 
     const exportDataToJson = (items: DatasetRecordItem[], filename: string) => {
         if (!items.length) {
-            toast.error('No dataset records available to export');
+            toast.warning('No records to export');
             return;
         }
-        const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(items, null, 2));
+        const jsonStr = JSON.stringify(
+            {
+                agency: 'NASA Human Research Program (HRP)',
+                classification: 'UNCLASSIFIED // NASA SPACEFLIGHT ARCHIVE',
+                reference: 'https://www.nasa.gov/hrp/hazards/',
+                exported_at: new Date().toISOString(),
+                record_count: items.length,
+                records: items,
+            },
+            null,
+            2
+        );
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', dataStr);
+        link.setAttribute('href', url);
         link.setAttribute('download', filename);
         document.body.appendChild(link);
         link.click();
@@ -388,24 +649,24 @@ export default function Dataset({ records = [] }: DatasetProps) {
     };
 
     const exportAllCsv = () => {
-        exportDataToCsv(filteredRecords, `NASA_AHMS_Full_Cohort_${Date.now()}.csv`);
-        toast.success(`Exported ${filteredRecords.length} records to CSV`);
+        exportDataToCsv(localRecords, `NASA_HRP_5Hazards_Telemetry_${Date.now()}.csv`);
+        toast.success(`Exported ${localRecords.length} records to CSV`);
     };
 
     const exportAllJson = () => {
-        exportDataToJson(filteredRecords, `NASA_AHMS_Full_Cohort_${Date.now()}.json`);
-        toast.success(`Exported ${filteredRecords.length} records to JSON archive`);
+        exportDataToJson(localRecords, `NASA_HRP_5Hazards_Telemetry_${Date.now()}.json`);
+        toast.success(`Exported ${localRecords.length} records to JSON`);
     };
 
     const exportSelectedCsv = () => {
         const selectedItems = localRecords.filter((r) => selectedIds.includes(r.Astronaut ?? r.id ?? ''));
-        exportDataToCsv(selectedItems, `NASA_AHMS_Selected_${selectedItems.length}_Crew_${Date.now()}.csv`);
+        exportDataToCsv(selectedItems, `NASA_HRP_Selected_${selectedItems.length}_Crew_${Date.now()}.csv`);
         toast.success(`Exported ${selectedItems.length} selected records to CSV`);
     };
 
     const exportSelectedJson = () => {
         const selectedItems = localRecords.filter((r) => selectedIds.includes(r.Astronaut ?? r.id ?? ''));
-        exportDataToJson(selectedItems, `NASA_AHMS_Selected_${selectedItems.length}_Crew_${Date.now()}.json`);
+        exportDataToJson(selectedItems, `NASA_HRP_Selected_${selectedItems.length}_Crew_${Date.now()}.json`);
         toast.success(`Exported ${selectedItems.length} selected records to JSON`);
     };
 
@@ -425,6 +686,37 @@ export default function Dataset({ records = [] }: DatasetProps) {
             return { text: display, color: 'text-amber-400 bg-amber-950/40 border-amber-800/80' };
         }
         return { text: display, color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/80' };
+    };
+
+    // Helper for Hazard badge color
+    const getHazardBadge = (hazardFocus?: string) => {
+        if (!hazardFocus) return { text: 'Gravity Fields (G)', code: 'G', color: 'text-sky-400 bg-sky-950/40 border-sky-800/80' };
+        const h = hazardFocus.toUpperCase();
+        if (h.includes('RADIATION') || h.includes('R')) {
+            return { text: 'Radiation (R)', code: 'R', color: 'text-rose-400 bg-rose-950/50 border-rose-700/80' };
+        }
+        if (h.includes('ISOLATION') || h.includes('I')) {
+            return { text: 'Isolation (I)', code: 'I', color: 'text-purple-400 bg-purple-950/50 border-purple-700/80' };
+        }
+        if (h.includes('DISTANCE') || h.includes('D')) {
+            return { text: 'Distance (D)', code: 'D', color: 'text-amber-400 bg-amber-950/50 border-amber-700/80' };
+        }
+        if (h.includes('ENVIRONMENT') || h.includes('E')) {
+            return { text: 'Closed Env (E)', code: 'E', color: 'text-emerald-400 bg-emerald-950/50 border-emerald-700/80' };
+        }
+        return { text: 'Gravity (G)', code: 'G', color: 'text-cyan-400 bg-cyan-950/50 border-cyan-700/80' };
+    };
+
+    // Helper for Risk Level badge
+    const getRiskLevelBadge = (level?: string) => {
+        const lvl = (level || 'Nominal').toUpperCase();
+        if (lvl === 'ELEVATED' || lvl === 'HIGH' || lvl === 'CRITICAL') {
+            return 'text-rose-400 bg-rose-950/40 border-rose-800/80 shadow-[0_0_8px_rgba(244,63,94,0.2)]';
+        }
+        if (lvl === 'GUARDED' || lvl === 'MODERATE' || lvl === 'WARNING') {
+            return 'text-amber-400 bg-amber-950/40 border-amber-800/80';
+        }
+        return 'text-emerald-400 bg-emerald-950/40 border-emerald-800/80';
     };
 
     // API: Manual Add Astronaut
@@ -455,19 +747,22 @@ export default function Dataset({ records = [] }: DatasetProps) {
             setManualForm({
                 Astronaut: '',
                 Name: '',
-                Age_at_mission_start: 38,
+                Age_at_mission_start: 45,
                 Gender: 'Male',
                 Country: 'USA / NASA',
                 'Mission_duration(Days)': 180,
-                No_of_Mission: 1,
+                No_of_Mission: 2,
                 Bone_Density_Loss: '-3.2%',
                 Muscle_Mass_Loss: '2.5%',
                 Radiation_Exposure: 95,
-                Cardiovascular_Risk_Score: 6,
-                Immune_Response_Suppression: 7.5,
-                Psychological_Impact_Score: 4,
+                Cardiovascular_Risk_Score: 4,
+                Immune_Response_Suppression: 6.5,
+                Psychological_Impact_Score: 3,
                 Vision_Change: 'Clear',
                 Countermeasures_Used: 'ARED Resistive Exercise, Bisphosphonates',
+                Hazard_Focus: 'Gravity Fields (G)',
+                Risk_Level: 'Nominal',
+                NASA_HRP_Protocol: 'NASA-STD-3001',
             });
         } catch (err: any) {
             toast.error(err.message || 'Failed to add astronaut record');
@@ -484,17 +779,20 @@ export default function Dataset({ records = [] }: DatasetProps) {
             Name: record.Name || '',
             Age_at_mission_start: Number(record.Age_at_mission_start ?? (record as any).age ?? (record as any).Age) || 40,
             Gender: record.Gender || 'Male',
-            Country: record.Country || 'NASA / International',
+            Country: record.Country || 'USA / NASA',
             'Mission_duration(Days)': Number(record['Mission_duration(Days)'] ?? (record as any).duration ?? (record as any).missionDurationDays ?? (record as any).Mission_duration) || 180,
             No_of_Mission: Number(record.No_of_Mission) || 1,
             Bone_Density_Loss: String(record.Bone_Density_Loss ?? '-3.0%'),
             Muscle_Mass_Loss: String(record.Muscle_Mass_Loss ?? '2.5%'),
             Radiation_Exposure: Number(record.Radiation_Exposure) || 95,
-            Cardiovascular_Risk_Score: Number(record.Cardiovascular_Risk_Score) || 6,
-            Immune_Response_Suppression: Number(record.Immune_Response_Suppression) || 7.5,
-            Psychological_Impact_Score: Number(record.Psychological_Impact_Score) || 4,
+            Cardiovascular_Risk_Score: Number(record.Cardiovascular_Risk_Score) || 4,
+            Immune_Response_Suppression: Number(record.Immune_Response_Suppression) || 6.5,
+            Psychological_Impact_Score: Number(record.Psychological_Impact_Score) || 3,
             Vision_Change: record.Vision_Change || 'Clear',
             Countermeasures_Used: record.Countermeasures_Used || 'ARED Resistive Exercise, Bisphosphonates',
+            Hazard_Focus: record.Hazard_Focus || 'Gravity Fields (G)',
+            Risk_Level: record.Risk_Level || 'Nominal',
+            NASA_HRP_Protocol: record.NASA_HRP_Protocol || 'NASA-STD-3001',
         });
         setIsEditModalOpen(true);
     };
@@ -622,6 +920,9 @@ export default function Dataset({ records = [] }: DatasetProps) {
             Psychological_Impact_Score: data.psychScore,
             Vision_Change: data.vision,
             Countermeasures_Used: data.countermeasures,
+            Hazard_Focus: (data.rawRecord as any)?.Hazard_Focus || 'Gravity Fields (G)',
+            Risk_Level: (data.rawRecord as any)?.Risk_Level || 'Nominal',
+            NASA_HRP_Protocol: (data.rawRecord as any)?.NASA_HRP_Protocol || 'NASA-STD-3001',
             ...(data.rawRecord || {}),
         };
 
@@ -650,15 +951,15 @@ export default function Dataset({ records = [] }: DatasetProps) {
         toast.success(`Database updated: ${resJson.count || 1} astronaut record(s) saved directly!`);
     };
 
-    const hasActiveFilters = searchQuery !== '' || selectedGender !== 'all' || selectedCountry !== 'all';
+    const hasActiveFilters = searchQuery !== '' || selectedGender !== 'all' || selectedCountry !== 'all' || selectedHazardFilter !== 'all';
 
     return (
         <>
-            <Head title="NASA AHMS • Bioastronautics Telemetry Archive">
+            <Head title="ORBIT • 5 Hazards of Human Spaceflight & Telemetry Archive">
                 <link rel="icon" href="/favicon.svg?v=nasa" type="image/svg+xml" />
             </Head>
 
-            {/* NASA AHMS HUD Main Container */}
+            {/* ORBIT HUD Main Container */}
             <div className="min-h-screen bg-[#030b14] text-[#5cdbdf] font-mono selection:bg-[#0284c7] selection:text-white p-3 sm:p-6 relative select-none overflow-x-hidden">
                 {/* Background Tech Gradients */}
                 <div className="fixed inset-0 pointer-events-none z-0">
@@ -676,7 +977,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                 </div>
 
                 <div className="relative z-10 max-w-[1700px] mx-auto space-y-5">
-                    {/* Top Bar: NASA AHMS Mission Control Header */}
+                    {/* Top Bar: ORBIT Mission Control Header */}
                     <header className="border border-[#1a4b6c] bg-[#06121e]/90 p-4 relative backdrop-blur-md">
                         <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#5cdbdf]" />
                         <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#5cdbdf]" />
@@ -692,14 +993,26 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h1 className="text-base sm:text-xl font-bold tracking-wider text-white">
-                                            NASA AHMS <span className="text-[#5cdbdf]">// BIOASTRONAUTICS ARCHIVE</span>
+                                            ORBIT <span className="text-[#5cdbdf]">// 5 HAZARDS OF HUMAN SPACEFLIGHT</span>
                                         </h1>
                                         <span className="px-2 py-0.5 text-[10px] tracking-widest border border-cyan-800/80 bg-cyan-950/60 text-cyan-300">
-                                            MYSQL DATABASE: <code className="text-[#5cdbdf]">dataset_records</code>
+                                            SQLITE DATABASE: <code className="text-[#5cdbdf]">nasa_hazards & dataset_records</code>
                                         </span>
                                     </div>
-                                    <p className="text-[11px] text-slate-400 tracking-wider mt-0.5">
-                                        HUMAN RESEARCH PROGRAM (HRP) • FULL CRUD • BULK IMPORT • ASTRONAUT ROSTER SYNC
+                                    <p className="text-[11px] text-slate-400 tracking-wider mt-0.5 flex flex-wrap items-center gap-2">
+                                        <span>NASA HUMAN RESEARCH PROGRAM (HRP)</span>
+                                        <span className="text-slate-600">•</span>
+                                        <span>RIDGE FRAMEWORK</span>
+                                        <span className="text-slate-600">•</span>
+                                        <a
+                                            href="https://www.nasa.gov/hrp/hazards/"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-cyan-400 hover:text-white underline inline-flex items-center gap-1"
+                                        >
+                                            <span>NASA.GOV/HRP/HAZARDS</span>
+                                            <ExternalLink className="w-3 h-3" />
+                                        </a>
                                     </p>
                                 </div>
                             </div>
@@ -718,8 +1031,8 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                    <span className="text-slate-400">STATUS:</span>
-                                    <span className="text-cyan-300 font-bold">FLIGHT SURGEON ACTIVE</span>
+                                    <span className="text-slate-400">STANDARD:</span>
+                                    <span className="text-cyan-300 font-bold">NASA-STD-3001</span>
                                 </div>
                             </div>
 
@@ -731,7 +1044,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     className="border border-[#5cdbdf] bg-[#5cdbdf]/15 text-[#5cdbdf] hover:bg-[#5cdbdf] hover:text-[#030b14] px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(92,219,223,0.2)]"
                                 >
                                     <UserPlus className="w-3.5 h-3.5" />
-                                    <span>MANUAL ADD</span>
+                                    <span>ADD CREW RECORD</span>
                                 </button>
 
                                 <button
@@ -740,7 +1053,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     className="border border-emerald-500/80 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.2)]"
                                 >
                                     <Upload className="w-3.5 h-3.5" />
-                                    <span>SCAN / IMPORT</span>
+                                    <span>IMPORT DATA</span>
                                 </button>
 
                                 <Link
@@ -774,6 +1087,115 @@ export default function Dataset({ records = [] }: DatasetProps) {
                         </div>
                     </header>
 
+                    {/* SECTION: NASA 5 HAZARDS OF HUMAN SPACEFLIGHT (RIDGE) INTERACTIVE MATRIX */}
+                    <section className="border border-[#1a4b6c] bg-[#06121e]/90 p-4 sm:p-5 relative backdrop-blur-md">
+                        <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#5cdbdf]" />
+                        <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#5cdbdf]" />
+                        <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#5cdbdf]" />
+                        <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#5cdbdf]" />
+
+                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-4 border-b border-[#1a4b6c]/50 pb-3">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-[#5cdbdf] text-slate-950 tracking-wider">
+                                        NASA HRP RIDGE FRAMEWORK
+                                    </span>
+                                    <h2 className="text-sm sm:text-base font-bold text-white tracking-wider">
+                                        THE 5 HAZARDS OF HUMAN SPACEFLIGHT
+                                    </h2>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    Official environmental stressors defined by the NASA Human Research Program. Click any card to inspect risks, metrics, and deployed countermeasures.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-xs">
+                                <a
+                                    href="https://www.nasa.gov/hrp/hazards/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all flex items-center gap-1.5 text-[11px]"
+                                >
+                                    <span>NASA HRP HAZARDS PORTAL</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* 5 Hazard Cards Grid (R-I-D-G-E) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                            {activeHazards.map((hazard) => {
+                                const isFilterActive = selectedHazardFilter.toLowerCase() === hazard.hazard_code.toLowerCase();
+                                return (
+                                    <div
+                                        key={hazard.hazard_code}
+                                        onClick={() => setSelectedHazardModal(hazard)}
+                                        className={`group relative p-4 border transition-all cursor-pointer flex flex-col justify-between ${
+                                            isFilterActive
+                                                ? 'border-[#5cdbdf] bg-[#0b3d91]/30 shadow-[0_0_15px_rgba(92,219,223,0.3)]'
+                                                : 'border-[#1a4b6c] bg-[#0a1f2e]/70 hover:border-[#5cdbdf] hover:bg-[#0a1f2e]'
+                                        }`}
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-7 h-7 flex items-center justify-center font-bold text-sm bg-[#030b14] border border-[#1a4b6c] text-[#5cdbdf] group-hover:border-[#5cdbdf] group-hover:text-white transition-colors">
+                                                        {hazard.hazard_code}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 tracking-wider">
+                                                        {hazard.hazard_id}
+                                                    </span>
+                                                </div>
+                                                <span
+                                                    className={`text-[9px] font-bold px-1.5 py-0.5 border ${
+                                                        hazard.severity_level === 'CRITICAL'
+                                                            ? 'border-rose-700 bg-rose-950/60 text-rose-300'
+                                                            : 'border-amber-700 bg-amber-950/60 text-amber-300'
+                                                    }`}
+                                                >
+                                                    {hazard.severity_level}
+                                                </span>
+                                            </div>
+
+                                            <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-[#5cdbdf] transition-colors leading-snug">
+                                                {hazard.title}
+                                            </h3>
+
+                                            <p className="text-[10px] text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                                {hazard.tagline || hazard.description}
+                                            </p>
+                                        </div>
+
+                                        <div className="mt-4 pt-3 border-t border-[#1a4b6c]/50 flex items-center justify-between text-[10px]">
+                                            <span className="text-[#5cdbdf] flex items-center gap-1 group-hover:underline">
+                                                <span>DETAILS</span>
+                                                <ChevronRight className="w-3 h-3" />
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedHazardFilter(
+                                                        selectedHazardFilter.toLowerCase() === hazard.hazard_code.toLowerCase()
+                                                            ? 'all'
+                                                            : hazard.hazard_code
+                                                    );
+                                                }}
+                                                className={`px-1.5 py-0.5 border text-[9px] transition-colors ${
+                                                    isFilterActive
+                                                        ? 'border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold'
+                                                        : 'border-[#1a4b6c] text-slate-400 hover:text-white'
+                                                }`}
+                                            >
+                                                {isFilterActive ? 'FILTERED' : 'FILTER CREW'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
                     {/* Stat Metrics Strip */}
                     <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                         <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
@@ -786,7 +1208,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                             </div>
                             <div className="text-[10px] text-[#5cdbdf] mt-1 flex items-center gap-1">
                                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#5cdbdf] animate-ping" />
-                                Active Database Records
+                                NASA Astronaut Records
                             </div>
                         </div>
 
@@ -805,7 +1227,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
 
                         <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
                             <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>MEAN BMD LOSS</span>
+                                <span>MEAN BMD LOSS (G)</span>
                                 <Bone className="w-3.5 h-3.5 text-rose-400" />
                             </div>
                             <div className="text-2xl font-bold text-rose-400 mt-1.5 tracking-tight">
@@ -818,14 +1240,14 @@ export default function Dataset({ records = [] }: DatasetProps) {
 
                         <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
                             <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>MEAN LAUNCH AGE</span>
-                                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                                <span>MEAN DOSIMETRY (R)</span>
+                                <Zap className="w-3.5 h-3.5 text-amber-400" />
                             </div>
-                            <div className="text-2xl font-bold text-white mt-1.5 tracking-tight">
-                                {metrics.avgAge} <span className="text-xs text-amber-300 font-normal">YRS</span>
+                            <div className="text-2xl font-bold text-amber-300 mt-1.5 tracking-tight">
+                                {metrics.avgRadiation} <span className="text-xs text-amber-400 font-normal">mSv</span>
                             </div>
                             <div className="text-[10px] text-slate-400 mt-1">
-                                Baseline Mission Onset
+                                Cosmic & Solar Absorption
                             </div>
                         </div>
 
@@ -838,7 +1260,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 {metrics.distinctCountries}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-1">
-                                International Roster
+                                International HRP Partners
                             </div>
                         </div>
 
@@ -856,7 +1278,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                         </div>
                     </section>
 
-                    {/* Bulk Selection Action Bar - Appears when 1+ rows are checked */}
+                    {/* Bulk Selection Action Bar */}
                     {selectedIds.length > 0 && (
                         <div className="border-2 border-[#5cdbdf] bg-[#0a1f2e] p-3.5 shadow-[0_0_20px_rgba(92,219,223,0.3)] flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
                             <div className="flex items-center gap-3">
@@ -917,7 +1339,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="SEARCH BY NAME, CALLSIGN, OR AGENCY..."
+                                placeholder="SEARCH ASTRONAUT, HAZARD, CALLSIGN, AGENCY..."
                                 className="w-full pl-9 pr-8 py-2 bg-[#030b14] border border-[#1a4b6c] text-[#5cdbdf] placeholder:text-slate-600 focus:outline-none focus:border-[#5cdbdf] transition-all text-xs tracking-wider"
                             />
                             {searchQuery && (
@@ -930,52 +1352,77 @@ export default function Dataset({ records = [] }: DatasetProps) {
                             )}
                         </div>
 
-                        {/* Filter Selectors */}
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <select
-                                value={selectedGender}
-                                onChange={(e) => setSelectedGender(e.target.value)}
-                                className="px-3 py-2 bg-[#030b14] border border-[#1a4b6c] text-slate-300 hover:border-[#5cdbdf] focus:border-[#5cdbdf] focus:outline-none cursor-pointer text-xs uppercase"
-                            >
-                                <option value="all">GENDER: ALL</option>
-                                <option value="male">MALE</option>
-                                <option value="female">FEMALE</option>
-                            </select>
-
-                            <select
-                                value={selectedCountry}
-                                onChange={(e) => setSelectedCountry(e.target.value)}
-                                className="px-3 py-2 bg-[#030b14] border border-[#1a4b6c] text-slate-300 hover:border-[#5cdbdf] focus:border-[#5cdbdf] focus:outline-none cursor-pointer text-xs uppercase max-w-[200px]"
-                            >
-                                <option value="all">AGENCY: ALL</option>
-                                {countries.map((c) => (
-                                    <option key={c} value={c}>
-                                        {c}
+                        {/* Filter Dropdowns */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Hazard Filter */}
+                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
+                                <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                                <select
+                                    value={selectedHazardFilter}
+                                    onChange={(e) => setSelectedHazardFilter(e.target.value)}
+                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer uppercase text-xs"
+                                >
+                                    <option value="all" className="bg-[#030b14] text-slate-200">
+                                        ALL 5 HAZARDS
                                     </option>
-                                ))}
-                            </select>
+                                    <option value="R" className="bg-[#030b14] text-rose-300">
+                                        R - SPACE RADIATION
+                                    </option>
+                                    <option value="I" className="bg-[#030b14] text-purple-300">
+                                        I - ISOLATION & CONFINEMENT
+                                    </option>
+                                    <option value="D" className="bg-[#030b14] text-amber-300">
+                                        D - DISTANCE FROM EARTH
+                                    </option>
+                                    <option value="G" className="bg-[#030b14] text-sky-300">
+                                        G - GRAVITY FIELDS
+                                    </option>
+                                    <option value="E" className="bg-[#030b14] text-emerald-300">
+                                        E - HOSTILE CLOSED ENV
+                                    </option>
+                                </select>
+                            </div>
 
-                            <select
-                                value={sortField}
-                                onChange={(e) => setSortField(e.target.value)}
-                                className="px-3 py-2 bg-[#030b14] border border-[#1a4b6c] text-slate-300 hover:border-[#5cdbdf] focus:border-[#5cdbdf] focus:outline-none cursor-pointer text-xs uppercase"
-                            >
-                                <option value="id">SORT: ASTRONAUT ID</option>
-                                <option value="name">SORT: NAME</option>
-                                <option value="duration">SORT: DURATION</option>
-                                <option value="boneLoss">SORT: BONE LOSS</option>
-                                <option value="age">SORT: LAUNCH AGE</option>
-                            </select>
+                            {/* Gender Filter */}
+                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
+                                <User className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                                <select
+                                    value={selectedGender}
+                                    onChange={(e) => setSelectedGender(e.target.value)}
+                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer uppercase text-xs"
+                                >
+                                    <option value="all" className="bg-[#030b14] text-slate-200">
+                                        GENDER: ALL
+                                    </option>
+                                    <option value="male" className="bg-[#030b14] text-slate-200">
+                                        MALE
+                                    </option>
+                                    <option value="female" className="bg-[#030b14] text-slate-200">
+                                        FEMALE
+                                    </option>
+                                </select>
+                            </div>
 
-                            <button
-                                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                                className="px-3 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] transition-all flex items-center gap-1.5 cursor-pointer uppercase font-bold"
-                                title="Toggle Sort Direction"
-                            >
-                                <ArrowUpDown className="w-3.5 h-3.5" />
-                                <span>{sortOrder === 'asc' ? 'ASC ▲' : 'DESC ▼'}</span>
-                            </button>
+                            {/* Country / Agency Filter */}
+                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
+                                <Globe className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                                <select
+                                    value={selectedCountry}
+                                    onChange={(e) => setSelectedCountry(e.target.value)}
+                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer text-xs"
+                                >
+                                    <option value="all" className="bg-[#030b14] text-slate-200">
+                                        AGENCY: ALL
+                                    </option>
+                                    {countries.map((c) => (
+                                        <option key={c} value={c} className="bg-[#030b14] text-slate-200">
+                                            {c}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
 
+                            {/* Reset Filters */}
                             {hasActiveFilters && (
                                 <button
                                     onClick={resetFilters}
@@ -1037,17 +1484,8 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                                 <ArrowUpDown className="w-3 h-3" />
                                             </div>
                                         </th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('age')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>LAUNCH AGE</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th className="p-3.5">GENDER</th>
-                                        <th className="p-3.5">AFFILIATION / AGENCY</th>
+                                        <th className="p-3.5">PRIMARY HAZARD (RIDGE)</th>
+                                        <th className="p-3.5">RISK LEVEL</th>
                                         <th
                                             className="p-3.5 cursor-pointer hover:text-white transition-colors"
                                             onClick={() => handleSort('duration')}
@@ -1062,10 +1500,20 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             onClick={() => handleSort('boneLoss')}
                                         >
                                             <div className="flex items-center gap-1.5">
-                                                <span>BMD LOSS (BONE)</span>
+                                                <span>BMD LOSS (G)</span>
                                                 <ArrowUpDown className="w-3 h-3" />
                                             </div>
                                         </th>
+                                        <th
+                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
+                                            onClick={() => handleSort('radiation')}
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                <span>DOSIMETRY (R)</span>
+                                                <ArrowUpDown className="w-3 h-3" />
+                                            </div>
+                                        </th>
+                                        <th className="p-3.5">AFFILIATION / AGENCY</th>
                                         <th className="p-3.5 text-right">ACTIONS</th>
                                     </tr>
                                 </thead>
@@ -1073,7 +1521,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 <tbody className="divide-y divide-[#1a4b6c]/40">
                                     {filteredRecords.length === 0 ? (
                                         <tr>
-                                            <td colSpan={9} className="p-12 text-center text-slate-400 font-mono">
+                                            <td colSpan={10} className="p-12 text-center text-slate-400 font-mono">
                                                 <div className="max-w-md mx-auto space-y-3">
                                                     <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
                                                     <p className="text-white font-bold text-sm tracking-widest">
@@ -1096,9 +1544,10 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             const recordId = record.Astronaut ?? record.id ?? index;
                                             const isSelected = selectedIds.includes(recordId);
                                             const boneBadge = getBoneLossBadge(record.Bone_Density_Loss);
+                                            const hazardBadge = getHazardBadge(record.Hazard_Focus);
+                                            const riskBadgeClass = getRiskLevelBadge(record.Risk_Level);
                                             const durationNum = Number(record['Mission_duration(Days)'] ?? (record as any).duration ?? (record as any).missionDurationDays ?? (record as any).Mission_duration) || 0;
                                             const durationPercent = Math.min(100, Math.round((durationNum / 365) * 100));
-                                            const ageNum = record.Age_at_mission_start ?? (record as any).age ?? (record as any).Age;
 
                                             return (
                                                 <tr
@@ -1122,123 +1571,114 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                                             {isSelected ? (
                                                                 <CheckSquare className="w-4 h-4 text-[#5cdbdf]" />
                                                             ) : (
-                                                                <Square className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
+                                                                <Square className="w-4 h-4 text-slate-500" />
                                                             )}
                                                         </button>
                                                     </td>
 
-                                                    {/* ID Badge */}
-                                                    <td className="p-3.5 font-bold text-[#5cdbdf]">
-                                                        <span className="px-2 py-1 border border-[#1a4b6c] bg-[#0a1f2e] group-hover:border-[#5cdbdf] transition-colors">
-                                                            {record.Astronaut !== undefined
-                                                                ? `AST-${record.Astronaut}`
-                                                                : `AST-${String(index + 1).padStart(2, '0')}`}
+                                                    {/* Astronaut ID */}
+                                                    <td className="p-3.5 font-bold text-slate-300 font-mono">
+                                                        <span className="px-2 py-0.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf]">
+                                                            AST-{recordId}
                                                         </span>
                                                     </td>
 
                                                     {/* Crew Member Name */}
-                                                    <td className="p-3.5 text-white font-medium">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="h-7 w-7 border border-[#1a4b6c] bg-[#0a1f2e] flex items-center justify-center text-[#5cdbdf] font-bold text-xs group-hover:border-[#5cdbdf] group-hover:shadow-[0_0_8px_rgba(92,219,223,0.3)] transition-all">
+                                                    <td className="p-3.5">
+                                                        <div className="font-bold text-white group-hover:text-[#5cdbdf] transition-colors flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded bg-[#0a1f2e] border border-[#1a4b6c] flex items-center justify-center text-[10px] text-[#5cdbdf] font-bold">
                                                                 {(record.Name || 'A').charAt(0)}
                                                             </div>
-                                                            <span className="group-hover:text-[#5cdbdf] transition-colors font-bold tracking-wide">
-                                                                {record.Name || 'Mission Specialist'}
-                                                            </span>
+                                                            <span>{record.Name || 'Astronaut Specialist'}</span>
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 mt-0.5">
+                                                            Flight Protocol: {record.NASA_HRP_Protocol || 'NASA-STD-3001'}
                                                         </div>
                                                     </td>
 
-                                                    {/* Launch Age */}
-                                                    <td className="p-3.5 text-slate-300">
-                                                        {ageNum ? (
-                                                            <span>
-                                                                {ageNum}{' '}
-                                                                <span className="text-slate-500 text-[10px]">YRS</span>
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-500">N/A</span>
-                                                        )}
-                                                    </td>
-
-                                                    {/* Gender */}
-                                                    <td className="p-3.5 text-slate-300">
-                                                        <span className="px-2 py-0.5 border border-[#1a4b6c]/80 bg-[#0a1f2e]/80 text-[11px] tracking-wider uppercase">
-                                                            {record.Gender || 'UNSPEC'}
+                                                    {/* Primary Hazard Focus (RIDGE) */}
+                                                    <td className="p-3.5">
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold border rounded-sm inline-flex items-center gap-1.5 ${hazardBadge.color}`}>
+                                                            <span>[{hazardBadge.code}]</span>
+                                                            <span>{hazardBadge.text}</span>
                                                         </span>
                                                     </td>
 
-                                                    {/* Affiliation / Country */}
-                                                    <td className="p-3.5 text-slate-300">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Globe className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#5cdbdf] transition-colors" />
-                                                            <span>{record.Country || 'NASA / International'}</span>
+                                                    {/* Risk Level */}
+                                                    <td className="p-3.5">
+                                                        <span className={`px-2 py-0.5 text-[10px] font-bold border rounded-sm ${riskBadgeClass}`}>
+                                                            {record.Risk_Level || 'Nominal'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Flight Duration */}
+                                                    <td className="p-3.5">
+                                                        <div className="font-bold text-white">
+                                                            {durationNum} <span className="text-[10px] text-slate-400 font-normal">DAYS</span>
+                                                        </div>
+                                                        <div className="w-24 h-1.5 bg-[#0a1f2e] border border-[#1a4b6c] mt-1 overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-gradient-to-r from-sky-500 to-[#5cdbdf]"
+                                                                style={{ width: `${durationPercent}%` }}
+                                                            />
                                                         </div>
                                                     </td>
 
-                                                    {/* Duration Progress */}
-                                                    <td className="p-3.5 text-sky-300">
-                                                        <div className="space-y-1 w-32">
-                                                            <div className="flex justify-between text-[11px]">
-                                                                <span className="font-bold text-white">{durationNum} d</span>
-                                                                <span className="text-slate-500 text-[10px]">{durationPercent}% 1yr</span>
-                                                            </div>
-                                                            <div className="w-full bg-[#0a1f2e] border border-[#1a4b6c]/60 h-1.5 overflow-hidden">
-                                                                <div
-                                                                    className="bg-[#5cdbdf] h-full transition-all duration-300"
-                                                                    style={{ width: `${durationPercent}%` }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Bone Density Loss Badge */}
+                                                    {/* BMD Loss (Bone) */}
                                                     <td className="p-3.5">
                                                         <span
-                                                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 border text-[11px] font-bold tracking-wider ${boneBadge.color}`}
+                                                            className={`px-2 py-0.5 border text-xs font-bold inline-block font-mono ${boneBadge.color}`}
                                                         >
-                                                            <TrendingDown className="w-3 h-3" />
                                                             {boneBadge.text}
                                                         </span>
                                                     </td>
 
-                                                    {/* Action Buttons: Inspect, Edit, Delete, HUD */}
-                                                    <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSelectedAstronaut(record)}
-                                                                className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-[#5cdbdf] hover:border-[#5cdbdf] transition-all cursor-pointer"
-                                                                title="Inspect Physiological Dossier"
-                                                            >
-                                                                <Eye className="w-3.5 h-3.5" />
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleOpenEdit(record)}
-                                                                className="p-1.5 border border-sky-800/80 bg-sky-950/40 text-sky-400 hover:text-white hover:border-sky-400 transition-all cursor-pointer"
-                                                                title="Edit Astronaut Telemetry Record"
-                                                            >
-                                                                <Edit3 className="w-3.5 h-3.5" />
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setDeletingRecord(record)}
-                                                                className="p-1.5 border border-red-900/60 bg-red-950/40 text-red-400 hover:text-white hover:border-red-500 transition-all cursor-pointer"
-                                                                title="Delete Astronaut Record from Database"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
-
-                                                            <Link
-                                                                href="/"
-                                                                className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf] transition-all"
-                                                                title="Open in Mission HUD"
-                                                            >
-                                                                <Activity className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                                            </Link>
+                                                    {/* Radiation Exposure */}
+                                                    <td className="p-3.5 font-mono">
+                                                        <div className="text-amber-300 font-bold">
+                                                            {record.Radiation_Exposure ? `${record.Radiation_Exposure} mSv` : '85 mSv'}
                                                         </div>
+                                                        <span className="text-[10px] text-slate-500">
+                                                            Max Limit: 300 mSv
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Affiliation / Agency */}
+                                                    <td className="p-3.5 text-slate-300">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Globe className="w-3.5 h-3.5 text-[#5cdbdf]" />
+                                                            <span className="truncate max-w-[150px]">{record.Country || 'USA / NASA'}</span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Actions */}
+                                                    <td
+                                                        className="p-3.5 text-right space-x-1"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <button
+                                                            onClick={() => setSelectedAstronaut(record)}
+                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-colors cursor-pointer inline-block"
+                                                            title="Inspect Full Medical Dossier"
+                                                        >
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => handleOpenEdit(record)}
+                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-amber-400 hover:border-amber-400 hover:text-white transition-colors cursor-pointer inline-block"
+                                                            title="Edit record parameters"
+                                                        >
+                                                            <Edit3 className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => setDeletingRecord(record)}
+                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-rose-400 hover:border-rose-400 hover:text-white transition-colors cursor-pointer inline-block"
+                                                            title="Delete record from database"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
@@ -1252,11 +1692,11 @@ export default function Dataset({ records = [] }: DatasetProps) {
                     {/* Bottom Status & Help Note */}
                     <footer className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 border-t border-[#1a4b6c]/40 pt-4 font-mono">
                         <div>
-                            NASA AHMS • FLIGHT SURGEON BIOASTRONAUTICS CONSOLE // CLASSIFIED JSC-HOU-9904
+                            ORBIT • FLIGHT SURGEON BIOASTRONAUTICS CONSOLE // JSC-HOU-9904
                         </div>
                         <div className="flex items-center gap-4 text-slate-400">
                             <span>TOTAL DATABASE RECORDS: <strong className="text-[#5cdbdf]">{localRecords.length}</strong></span>
-                            <span>SYNC ENGINE: <strong className="text-emerald-400">MYSQL ATOMIC</strong></span>
+                            <span>SYNC ENGINE: <strong className="text-emerald-400">SQLITE // NASA HRP ATOMIC</strong></span>
                         </div>
                     </footer>
                 </div>
@@ -1286,7 +1726,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             MANUAL ADD ASTRONAUT RECORD
                                         </h3>
                                         <p className="text-[11px] text-slate-400">
-                                            Inserts record directly into MySQL <code className="text-[#5cdbdf]">dataset_records</code>
+                                            Inserts record directly into SQLite <code className="text-[#5cdbdf]">dataset_records</code>
                                         </p>
                                     </div>
                                 </div>
@@ -1308,7 +1748,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             type="text"
                                             value={manualForm.Astronaut}
                                             onChange={(e) => setManualForm({ ...manualForm, Astronaut: e.target.value })}
-                                            placeholder="e.g. 76 (or auto)"
+                                            placeholder="e.g. 13 (or auto)"
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
                                     </div>
@@ -1324,6 +1764,37 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             placeholder="e.g. CDR. Sarah Connor"
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-slate-400 mb-1">
+                                            PRIMARY HAZARD FOCUS (RIDGE)
+                                        </label>
+                                        <select
+                                            value={manualForm.Hazard_Focus}
+                                            onChange={(e) => setManualForm({ ...manualForm, Hazard_Focus: e.target.value })}
+                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
+                                        >
+                                            <option value="Space Radiation (R)">R - Space Radiation</option>
+                                            <option value="Isolation and Confinement (I)">I - Isolation & Confinement</option>
+                                            <option value="Distance from Earth (D)">D - Distance from Earth</option>
+                                            <option value="Gravity Fields (G)">G - Gravity Fields</option>
+                                            <option value="Hostile and Closed Environments (E)">E - Hostile & Closed Environments</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-slate-400 mb-1">
+                                            RISK LEVEL
+                                        </label>
+                                        <select
+                                            value={manualForm.Risk_Level}
+                                            onChange={(e) => setManualForm({ ...manualForm, Risk_Level: e.target.value })}
+                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
+                                        >
+                                            <option value="Nominal">Nominal</option>
+                                            <option value="Guarded">Guarded</option>
+                                            <option value="Elevated">Elevated</option>
+                                            <option value="Critical">Critical</option>
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
@@ -1363,7 +1834,6 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             type="text"
                                             value={manualForm.Country}
                                             onChange={(e) => setManualForm({ ...manualForm, Country: e.target.value })}
-                                            placeholder="e.g. USA / NASA, ESA, JAXA"
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
                                     </div>
@@ -1385,61 +1855,23 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            BONE MINERAL DENSITY LOSS (%)
+                                            BONE MINERAL DENSITY LOSS
                                         </label>
                                         <input
                                             type="text"
                                             value={manualForm.Bone_Density_Loss}
-                                            onChange={(e) =>
-                                                setManualForm({ ...manualForm, Bone_Density_Loss: e.target.value })
-                                            }
-                                            placeholder="-3.2%"
+                                            onChange={(e) => setManualForm({ ...manualForm, Bone_Density_Loss: e.target.value })}
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            MUSCLE MASS LOSS (%)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={manualForm.Muscle_Mass_Loss}
-                                            onChange={(e) =>
-                                                setManualForm({ ...manualForm, Muscle_Mass_Loss: e.target.value })
-                                            }
-                                            placeholder="2.5%"
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            RADIATION EXPOSURE (MSV)
+                                            RADIATION EXPOSURE (mSv)
                                         </label>
                                         <input
                                             type="number"
                                             value={manualForm.Radiation_Exposure}
-                                            onChange={(e) =>
-                                                setManualForm({
-                                                    ...manualForm,
-                                                    Radiation_Exposure: parseInt(e.target.value) || 95,
-                                                })
-                                            }
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            CARDIO RISK SCORE (1-10)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={manualForm.Cardiovascular_Risk_Score}
-                                            onChange={(e) =>
-                                                setManualForm({
-                                                    ...manualForm,
-                                                    Cardiovascular_Risk_Score: parseInt(e.target.value) || 6,
-                                                })
-                                            }
+                                            onChange={(e) => setManualForm({ ...manualForm, Radiation_Exposure: parseInt(e.target.value) || 95 })}
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
                                     </div>
@@ -1452,9 +1884,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     <input
                                         type="text"
                                         value={manualForm.Countermeasures_Used}
-                                        onChange={(e) =>
-                                            setManualForm({ ...manualForm, Countermeasures_Used: e.target.value })
-                                        }
+                                        onChange={(e) => setManualForm({ ...manualForm, Countermeasures_Used: e.target.value })}
                                         className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                     />
                                 </div>
@@ -1473,7 +1903,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                         className="px-5 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 flex items-center gap-2"
                                     >
                                         <Check className="w-4 h-4" />
-                                        <span>{isSubmitting ? 'SAVING...' : 'SAVE RECORD TO DATABASE'}</span>
+                                        <span>{isSubmitting ? 'INSERTING...' : 'SAVE RECORD'}</span>
                                     </button>
                                 </div>
                             </form>
@@ -1481,21 +1911,16 @@ export default function Dataset({ records = [] }: DatasetProps) {
                     </div>
                 )}
 
-                {/* MODAL 2: Edit Astronaut Record Modal */}
-                {isEditModalOpen && editingRecord && (
+                {/* MODAL 2: Edit Record Modal */}
+                {isEditModalOpen && (
                     <div
                         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
                         onClick={() => setIsEditModalOpen(false)}
                     >
                         <div
-                            className="relative w-full max-w-2xl border border-[#1a4b6c] bg-[#06121e] p-6 shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
+                            className="relative w-full max-w-2xl border border-sky-600 bg-[#06121e] p-6 shadow-[0_0_50px_rgba(2,132,199,0.3)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-[#5cdbdf]" />
-
                             <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-3 mb-4 shrink-0">
                                 <div className="flex items-center gap-2.5">
                                     <div className="p-1.5 border border-sky-400/40 bg-sky-950/60 text-sky-400">
@@ -1503,10 +1928,10 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     </div>
                                     <div>
                                         <h3 className="text-sm sm:text-base font-bold text-white tracking-wider">
-                                            EDIT ASTRONAUT RECORD // ID: {editingRecord.Astronaut ?? editingRecord.id}
+                                            EDIT ASTRONAUT RECORD #{editForm.Astronaut}
                                         </h3>
                                         <p className="text-[11px] text-slate-400">
-                                            Updating telemetry in MySQL <code className="text-[#5cdbdf]">dataset_records</code>
+                                            Update physiological & hazard monitoring parameters
                                         </p>
                                     </div>
                                 </div>
@@ -1522,17 +1947,6 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            ASTRONAUT ID (PRIMARY KEY)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            disabled
-                                            value={editForm.Astronaut}
-                                            className="w-full bg-[#030b14] border border-[#1a4b6c]/60 px-3 py-1.5 text-slate-400 cursor-not-allowed"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
                                             CREW MEMBER NAME *
                                         </label>
                                         <input
@@ -1545,32 +1959,33 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            LAUNCH AGE
+                                            PRIMARY HAZARD FOCUS (RIDGE)
                                         </label>
-                                        <input
-                                            type="number"
-                                            value={editForm.Age_at_mission_start}
-                                            onChange={(e) =>
-                                                setEditForm({
-                                                    ...editForm,
-                                                    Age_at_mission_start: parseInt(e.target.value) || 40,
-                                                })
-                                            }
+                                        <select
+                                            value={editForm.Hazard_Focus}
+                                            onChange={(e) => setEditForm({ ...editForm, Hazard_Focus: e.target.value })}
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
+                                        >
+                                            <option value="Space Radiation (R)">R - Space Radiation</option>
+                                            <option value="Isolation and Confinement (I)">I - Isolation & Confinement</option>
+                                            <option value="Distance from Earth (D)">D - Distance from Earth</option>
+                                            <option value="Gravity Fields (G)">G - Gravity Fields</option>
+                                            <option value="Hostile and Closed Environments (E)">E - Hostile & Closed Environments</option>
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            GENDER
+                                            RISK LEVEL
                                         </label>
                                         <select
-                                            value={editForm.Gender}
-                                            onChange={(e) => setEditForm({ ...editForm, Gender: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf] uppercase"
+                                            value={editForm.Risk_Level}
+                                            onChange={(e) => setEditForm({ ...editForm, Risk_Level: e.target.value })}
+                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         >
-                                            <option value="Male">Male</option>
-                                            <option value="Female">Female</option>
-                                            <option value="Other">Other</option>
+                                            <option value="Nominal">Nominal</option>
+                                            <option value="Guarded">Guarded</option>
+                                            <option value="Elevated">Elevated</option>
+                                            <option value="Critical">Critical</option>
                                         </select>
                                     </div>
                                     <div>
@@ -1613,12 +2028,12 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     </div>
                                     <div>
                                         <label className="block text-[10px] text-slate-400 mb-1">
-                                            MUSCLE MASS LOSS
+                                            RADIATION EXPOSURE (mSv)
                                         </label>
                                         <input
-                                            type="text"
-                                            value={editForm.Muscle_Mass_Loss}
-                                            onChange={(e) => setEditForm({ ...editForm, Muscle_Mass_Loss: e.target.value })}
+                                            type="number"
+                                            value={editForm.Radiation_Exposure}
+                                            onChange={(e) => setEditForm({ ...editForm, Radiation_Exposure: parseInt(e.target.value) || 95 })}
                                             className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
                                         />
                                     </div>
@@ -1652,7 +2067,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                         className="px-5 py-2 border border-sky-400 bg-sky-500 text-[#030b14] font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 flex items-center gap-2"
                                     >
                                         <Check className="w-4 h-4" />
-                                        <span>{isSubmitting ? 'UPDATING...' : 'SAVE CHANGES TO DATABASE'}</span>
+                                        <span>{isSubmitting ? 'UPDATING...' : 'SAVE CHANGES'}</span>
                                     </button>
                                 </div>
                             </form>
@@ -1679,9 +2094,9 @@ export default function Dataset({ records = [] }: DatasetProps) {
                             <p className="text-slate-300 leading-relaxed">
                                 Are you sure you want to permanently remove astronaut record{' '}
                                 <strong className="text-white">
-                                    {deletingRecord.Name} (AST-{deletingRecord.Astronaut ?? deletingRecord.id})
+                                    {deletingRecord.Name} (#{deletingRecord.Astronaut ?? deletingRecord.id})
                                 </strong>{' '}
-                                from the MySQL database? This action is irreversible.
+                                from the SQLite database?
                             </p>
                             <div className="flex items-center justify-end gap-3 pt-2">
                                 <button
@@ -1698,7 +2113,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                     className="px-4 py-2 border border-red-500 bg-red-600 text-white font-bold hover:bg-red-500 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
-                                    <span>{isSubmitting ? 'DELETING...' : 'DELETE PERMANENTLY'}</span>
+                                    <span>{isSubmitting ? 'DELETING...' : 'CONFIRM DELETE'}</span>
                                 </button>
                             </div>
                         </div>
@@ -1716,17 +2131,14 @@ export default function Dataset({ records = [] }: DatasetProps) {
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="flex items-center gap-3 text-red-400">
-                                <Trash2 className="w-6 h-6 shrink-0" />
+                                <AlertTriangle className="w-6 h-6 shrink-0" />
                                 <h3 className="text-base font-bold text-white tracking-wider">
-                                    CONFIRM BULK DELETION
+                                    BULK DELETE CONFIRMATION
                                 </h3>
                             </div>
                             <p className="text-slate-300 leading-relaxed">
                                 You are about to permanently delete{' '}
-                                <strong className="text-red-400 font-bold">
-                                    {selectedIds.length} selected astronaut record(s)
-                                </strong>{' '}
-                                from the MySQL <code className="text-[#5cdbdf]">dataset_records</code> database table.
+                                <strong className="text-red-400">{selectedIds.length}</strong> selected astronaut records from the database.
                             </p>
                             <div className="flex items-center justify-end gap-3 pt-2">
                                 <button
@@ -1757,14 +2169,14 @@ export default function Dataset({ records = [] }: DatasetProps) {
                     onSaveToDatabase={handleSaveImportToDatabase}
                 />
 
-                {/* MODAL 6: Astronaut Inspection Detail Modal (NASA Dossier) */}
-                {selectedAstronaut && (
+                {/* MODAL 6: NASA 5 HAZARDS DETAIL MODAL */}
+                {selectedHazardModal && (
                     <div
                         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setSelectedAstronaut(null)}
+                        onClick={() => setSelectedHazardModal(null)}
                     >
                         <div
-                            className="relative w-full max-w-xl border border-[#1a4b6c] bg-[#06121e] p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden font-mono"
+                            className="relative w-full max-w-3xl border border-[#5cdbdf] bg-[#06121e] p-6 sm:p-8 shadow-[0_0_60px_rgba(92,219,223,0.3)] overflow-hidden font-mono max-h-[90vh] flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#5cdbdf]" />
@@ -1772,7 +2184,157 @@ export default function Dataset({ records = [] }: DatasetProps) {
                             <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#5cdbdf]" />
                             <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#5cdbdf]" />
 
-                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-4 mb-6">
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-4 mb-4 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-10 h-10 flex items-center justify-center font-bold text-xl bg-[#030b14] border-2 border-[#5cdbdf] text-[#5cdbdf]">
+                                        {selectedHazardModal.hazard_code}
+                                    </span>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-base sm:text-lg font-bold text-white tracking-wider">
+                                                {selectedHazardModal.title}
+                                            </h3>
+                                            <span className="text-[10px] px-2 py-0.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf]">
+                                                {selectedHazardModal.hazard_id}
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                            {selectedHazardModal.category} • NASA Human Research Program (HRP)
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedHazardModal(null)}
+                                    className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf] transition-colors cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {/* Modal Content Scrollable */}
+                            <div className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs text-slate-300">
+                                {/* Description & Deep Space Context */}
+                                <div className="p-3.5 border border-[#1a4b6c] bg-[#0a1f2e]/70 space-y-2">
+                                    <span className="text-[10px] text-[#5cdbdf] font-bold tracking-wider block">
+                                        DEEP SPACE FLIGHT CONTEXT
+                                    </span>
+                                    <p className="leading-relaxed">
+                                        {selectedHazardModal.description}
+                                    </p>
+                                    {selectedHazardModal.deep_space_context && (
+                                        <p className="text-slate-400 font-sans italic pt-1 border-t border-[#1a4b6c]/40">
+                                            {selectedHazardModal.deep_space_context}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Key Physiological Risks */}
+                                {selectedHazardModal.key_risks && selectedHazardModal.key_risks.length > 0 && (
+                                    <div className="p-3.5 border border-rose-950/80 bg-rose-950/20 space-y-2">
+                                        <span className="text-[10px] text-rose-400 font-bold tracking-wider flex items-center gap-1.5">
+                                            <ShieldAlert className="w-3.5 h-3.5" /> PRIMARY PHYSIOLOGICAL RISKS & CLINICAL PATHOLOGY
+                                        </span>
+                                        <ul className="space-y-1.5 text-slate-300 pl-4 list-disc marker:text-rose-400">
+                                            {selectedHazardModal.key_risks.map((risk, idx) => (
+                                                <li key={idx} className="leading-relaxed">
+                                                    {risk}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* Key Biomedical Sensor Metrics */}
+                                {selectedHazardModal.biomedical_metrics && selectedHazardModal.biomedical_metrics.length > 0 && (
+                                    <div className="p-3.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-2">
+                                        <span className="text-[10px] text-[#5cdbdf] font-bold tracking-wider flex items-center gap-1.5">
+                                            <Activity className="w-3.5 h-3.5" /> CLINICAL THRESHOLDS & DOSIMETRY METRICS
+                                        </span>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                                            {selectedHazardModal.biomedical_metrics.map((m, idx) => (
+                                                <div key={idx} className="p-2 border border-[#1a4b6c]/60 bg-[#06121e]">
+                                                    <span className="text-[10px] text-slate-400 block">{m.metric}</span>
+                                                    <div className="flex items-center justify-between mt-1">
+                                                        <span className="text-emerald-400 font-bold text-[11px] font-mono">
+                                                            Nominal: {m.nominal}
+                                                        </span>
+                                                        <span className="text-rose-400 text-[11px] font-mono">
+                                                            Alert: {m.critical}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* NASA Countermeasures & Technologies */}
+                                {selectedHazardModal.countermeasures && selectedHazardModal.countermeasures.length > 0 && (
+                                    <div className="p-3.5 border border-emerald-950/80 bg-emerald-950/20 space-y-2">
+                                        <span className="text-[10px] text-emerald-400 font-bold tracking-wider flex items-center gap-1.5">
+                                            <CheckCircle2 className="w-3.5 h-3.5" /> DEPLOYED NASA COUNTERMEASURES & TECHNOLOGIES
+                                        </span>
+                                        <div className="space-y-2 mt-2">
+                                            {selectedHazardModal.countermeasures.map((cm, idx) => (
+                                                <div key={idx} className="p-2 border border-emerald-900/60 bg-[#06121e]">
+                                                    <div className="flex items-center justify-between">
+                                                        <strong className="text-white text-[11px]">{cm.name}</strong>
+                                                        <span className="text-[9px] px-1.5 py-0.5 border border-emerald-700 bg-emerald-950/60 text-emerald-300">
+                                                            {cm.status}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-400 mt-1">{cm.desc}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer Buttons */}
+                            <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#1a4b6c] mt-4 shrink-0">
+                                <a
+                                    href={selectedHazardModal.nasa_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3.5 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold"
+                                >
+                                    <span>OFFICIAL NASA HRP DOCUMENTATION</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+
+                                <button
+                                    onClick={() => {
+                                        setSelectedHazardFilter(selectedHazardModal.hazard_code);
+                                        setSelectedHazardModal(null);
+                                        toast.info(`Filtered roster to crew evaluated under ${selectedHazardModal.title}`);
+                                    }}
+                                    className="px-4 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold hover:brightness-110 transition-all text-xs"
+                                >
+                                    FILTER CREW BY THIS HAZARD
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL 7: Astronaut Inspection Detail Modal (NASA Dossier with 5 Hazards Profile) */}
+                {selectedAstronaut && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+                        onClick={() => setSelectedAstronaut(null)}
+                    >
+                        <div
+                            className="relative w-full max-w-xl border border-[#1a4b6c] bg-[#06121e] p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#5cdbdf]" />
+                            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-[#5cdbdf]" />
+                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#5cdbdf]" />
+                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#5cdbdf]" />
+
+                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-4 mb-4 shrink-0">
                                 <div className="flex items-center gap-3">
                                     <div className="h-10 w-10 border border-[#1a4b6c] bg-[#0a1f2e] flex items-center justify-center text-[#5cdbdf] font-bold text-base shadow-[0_0_10px_rgba(92,219,223,0.2)]">
                                         {(selectedAstronaut.Name || 'A').charAt(0)}
@@ -1782,7 +2344,7 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                             {selectedAstronaut.Name || 'Astronaut Specialist'}
                                         </h3>
                                         <span className="text-[11px] text-[#5cdbdf] tracking-widest">
-                                            CALLSIGN: AST-{selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'} • NASA HRP ARCHIVE
+                                            CALLSIGN: AST-{selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'} • NASA HRP BIOASTRONAUTICS
                                         </span>
                                     </div>
                                 </div>
@@ -1794,48 +2356,65 @@ export default function Dataset({ records = [] }: DatasetProps) {
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 text-xs mb-6">
-                                <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                    <span className="text-slate-400 block text-[10px] tracking-wider">MISSION DURATION</span>
-                                    <span className="text-lg font-bold text-white mt-1 block">
-                                        {selectedAstronaut['Mission_duration(Days)'] ?? (selectedAstronaut as any).duration ?? (selectedAstronaut as any).missionDurationDays ?? 180} <span className="text-xs text-sky-400 font-normal">Days</span>
-                                    </span>
+                            <div className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
+                                        <span className="text-slate-400 block text-[10px] tracking-wider">MISSION DURATION</span>
+                                        <span className="text-lg font-bold text-white mt-1 block">
+                                            {selectedAstronaut['Mission_duration(Days)'] ?? (selectedAstronaut as any).duration ?? (selectedAstronaut as any).missionDurationDays ?? 180} <span className="text-xs text-sky-400 font-normal">Days</span>
+                                        </span>
+                                    </div>
+
+                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
+                                        <span className="text-slate-400 block text-[10px] tracking-wider">BMD LOSS (G)</span>
+                                        <span className="text-lg font-bold text-rose-400 mt-1 block">
+                                            {selectedAstronaut.Bone_Density_Loss || '-3.0%'}
+                                        </span>
+                                    </div>
+
+                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
+                                        <span className="text-slate-400 block text-[10px] tracking-wider">RADIATION EXPOSURE (R)</span>
+                                        <span className="text-lg font-bold text-amber-300 mt-1 block">
+                                            {selectedAstronaut.Radiation_Exposure ? `${selectedAstronaut.Radiation_Exposure} mSv` : '88 mSv'}
+                                        </span>
+                                    </div>
+
+                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
+                                        <span className="text-slate-400 block text-[10px] tracking-wider">PRIMARY HAZARD (RIDGE)</span>
+                                        <span className="text-sm font-bold text-[#5cdbdf] mt-1 block truncate">
+                                            {selectedAstronaut.Hazard_Focus || 'Gravity Fields (G)'}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                    <span className="text-slate-400 block text-[10px] tracking-wider">BMD LOSS</span>
-                                    <span className="text-lg font-bold text-rose-400 mt-1 block">
-                                        {selectedAstronaut.Bone_Density_Loss || '-3.0%'}
-                                    </span>
-                                </div>
-
-                                <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                    <span className="text-slate-400 block text-[10px] tracking-wider">LAUNCH AGE</span>
-                                    <span className="text-lg font-bold text-white mt-1 block">
-                                        {selectedAstronaut.Age_at_mission_start ?? (selectedAstronaut as any).age ?? 40} <span className="text-xs text-amber-300 font-normal">Years</span>
-                                    </span>
-                                </div>
-
-                                <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                    <span className="text-slate-400 block text-[10px] tracking-wider">AFFILIATION / AGENCY</span>
-                                    <span className="text-sm font-bold text-[#5cdbdf] mt-1 block truncate">
-                                        {selectedAstronaut.Country || 'NASA / International'}
-                                    </span>
+                                {/* NASA 5-Hazard Clinical Assessment Box */}
+                                <div className="p-4 border border-[#1a4b6c] bg-[#0a1f2e]/80 text-slate-300 leading-relaxed">
+                                    <div className="text-[#5cdbdf] font-bold mb-2 flex items-center justify-between tracking-wider">
+                                        <span className="flex items-center gap-1.5">
+                                            <Shield className="w-3.5 h-3.5" /> NASA HRP 5-HAZARD EVALUATION
+                                        </span>
+                                        <span className="text-[10px] px-2 py-0.5 border border-cyan-800 bg-cyan-950/60 text-cyan-300">
+                                            {selectedAstronaut.NASA_HRP_Protocol || 'NASA-STD-3001'}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1.5 text-[11px]">
+                                        <div>
+                                            <strong className="text-white">Active Countermeasures:</strong>{' '}
+                                            {selectedAstronaut.Countermeasures_Used || 'ARED High-Resistance Exercise, Bisphosphonate protocol, SSLA dynamic circadian spectrum lighting.'}
+                                        </div>
+                                        <div>
+                                            <strong className="text-white">Neuro-Ocular & Vision (SANS):</strong>{' '}
+                                            <span className="text-cyan-300">{selectedAstronaut.Vision_Change || 'Clear (Nominal optic nerve sheath)'}</span>
+                                        </div>
+                                        <div>
+                                            <strong className="text-white">Affiliation & Role:</strong>{' '}
+                                            {selectedAstronaut.Country || 'USA / NASA'} • {selectedAstronaut.No_of_Mission || 1} Spaceflight Mission(s)
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="p-4 border border-[#1a4b6c] bg-[#0a1f2e]/80 text-xs text-slate-300 leading-relaxed mb-6">
-                                <div className="text-[#5cdbdf] font-bold mb-1.5 flex items-center gap-1.5 tracking-wider">
-                                    <Shield className="w-3.5 h-3.5" /> MICROGRAVITY PHYSIOLOGICAL EVALUATION
-                                </div>
-                                <p className="text-slate-300 font-sans text-xs">
-                                    Subject logged <strong className="text-white font-mono">{selectedAstronaut['Mission_duration(Days)']} days</strong> in orbital microgravity with{' '}
-                                    <strong className="text-rose-400 font-mono">{selectedAstronaut.Bone_Density_Loss}</strong> bone mineral density demineralization.
-                                    Prescribed counter-measures: {selectedAstronaut.Countermeasures_Used || 'Advanced Resistive Exercise Device (ARED) protocol, bisphosphonate therapeutic counters, and targeted post-flight neuromuscular rehabilitation.'}
-                                </p>
-                            </div>
-
-                            <div className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center justify-between gap-3 text-xs pt-4 border-t border-[#1a4b6c] shrink-0">
                                 <button
                                     onClick={() => setSelectedAstronaut(null)}
                                     className="px-4 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] transition-all cursor-pointer tracking-wider"
@@ -1857,5 +2436,3 @@ export default function Dataset({ records = [] }: DatasetProps) {
         </>
     );
 }
-
-Dataset.layout = (page: React.ReactNode) => page;

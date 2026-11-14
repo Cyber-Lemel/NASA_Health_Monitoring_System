@@ -4,22 +4,26 @@ use App\Events\AstronautTelemetryUpdated;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\DatasetController;
 use App\Models\DatasetRecord;
+use App\Models\NasaHazard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Main Mission Control Dashboard (Direct entry point - no landing page, no authentication required)
 $dashboardHandler = function () {
     $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
+    $hazards = NasaHazard::orderBy('id', 'asc')->get();
     return inertia('dashboard', [
         'records' => $records,
+        'hazards' => $hazards,
     ]);
 };
 
 Route::get('/', $dashboardHandler)->name('home');
 Route::get('/dashboard', $dashboardHandler)->name('dashboard');
 
-// Kaggle Dataset Archive & Management (Directly accessible - no authentication required)
+// NASA Human Research Program (HRP) - 5 Hazards of Human Spaceflight & Telemetry Archive
 Route::get('/dataset', [DatasetController::class, 'index'])->name('dataset.index');
+Route::get('/api/nasa/hazards', [DatasetController::class, 'hazards'])->name('nasa.hazards');
 Route::post('/api/dataset/import', [DatasetController::class, 'import'])->name('dataset.import');
 Route::post('/api/dataset/records', [DatasetController::class, 'store'])->name('dataset.store');
 Route::put('/api/dataset/records/{astronaut}', [DatasetController::class, 'update'])->name('dataset.update');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DatasetRecord;
+use App\Models\NasaHazard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -10,15 +11,32 @@ use Illuminate\Support\Facades\Log;
 class DatasetController extends Controller
 {
     /**
-     * Display the full dataset page with all records.
+     * Display the full NASA HRP 5 Hazards and astronaut dataset page.
      */
     public function index()
     {
-        // Fetch all astronaut records ordered by primary key Astronaut asc
+        // Fetch all astronaut records and official NASA 5 Hazards
         $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
+        $hazards = NasaHazard::orderBy('id', 'asc')->get();
 
         return inertia('Dataset', [
             'records' => $records,
+            'hazards' => $hazards,
+        ]);
+    }
+
+    /**
+     * Return the 5 Hazards of Human Spaceflight dataset (NASA Human Research Program).
+     */
+    public function hazards()
+    {
+        $hazards = NasaHazard::orderBy('id', 'asc')->get();
+
+        return response()->json([
+            'success' => true,
+            'source' => 'NASA Human Research Program (HRP) - 5 Hazards of Human Spaceflight',
+            'url' => 'https://www.nasa.gov/hrp/hazards/',
+            'hazards' => $hazards,
         ]);
     }
 
@@ -408,7 +426,22 @@ class DatasetController extends Controller
         $counterRaw = $find(['Countermeasures_Used', 'Countermeasures Used', 'Countermeasures', 'countermeasures', 'protocol', 'protocol_used']);
         $countermeasures = ($counterRaw !== null && trim((string) $counterRaw) !== '')
             ? trim((string) $counterRaw)
-            : 'Exercise, Calcium Supplements';
+            : 'ARED Resistive Exercise, Bisphosphonates';
+
+        $hazardFocusRaw = $find(['Hazard_Focus', 'Hazard Focus', 'hazardFocus', 'Primary Hazard', 'hazard', 'Hazard']);
+        $hazardFocus = ($hazardFocusRaw !== null && trim((string) $hazardFocusRaw) !== '')
+            ? trim((string) $hazardFocusRaw)
+            : 'Gravity Fields (G)';
+
+        $riskLevelRaw = $find(['Risk_Level', 'Risk Level', 'riskLevel', 'risk', 'Risk', 'status']);
+        $riskLevel = ($riskLevelRaw !== null && trim((string) $riskLevelRaw) !== '')
+            ? trim((string) $riskLevelRaw)
+            : 'Nominal';
+
+        $hrpProtocolRaw = $find(['NASA_HRP_Protocol', 'HRP Protocol', 'protocol', 'NASA Protocol', 'hrpProtocol']);
+        $hrpProtocol = ($hrpProtocolRaw !== null && trim((string) $hrpProtocolRaw) !== '')
+            ? trim((string) $hrpProtocolRaw)
+            : 'NASA-STD-3001';
 
         return [
             'Astronaut' => $id,
@@ -426,6 +459,9 @@ class DatasetController extends Controller
             'Psychological_Impact_Score' => $psych,
             'Vision_Change' => $vision,
             'Countermeasures_Used' => $countermeasures,
+            'Hazard_Focus' => $hazardFocus,
+            'Risk_Level' => $riskLevel,
+            'NASA_HRP_Protocol' => $hrpProtocol,
         ];
     }
 }

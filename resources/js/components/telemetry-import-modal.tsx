@@ -264,7 +264,7 @@ export default function TelemetryImportModal({
                                         NEED A COMPATIBLE TEMPLATE?
                                     </div>
                                     <div className="text-slate-400 text-[11px]">
-                                        Download standardized NASA health monitoring import files pre-configured with telemetry fields.
+                                        Download standardized ORBIT health monitoring import files pre-configured with telemetry fields.
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">

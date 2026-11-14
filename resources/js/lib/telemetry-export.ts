@@ -24,9 +24,9 @@ export function exportAstronautToExcel(
 
     // --- SHEET 1: Active Astronaut Telemetry & Vitals ---
     const telemetrySheetData = [
-        ['NASA BIOMEDICAL OPERATIONS • DEEP SPACE MISSION TELEMETRY'],
+        ['ORBIT BIOMEDICAL OPERATIONS • DEEP SPACE MISSION TELEMETRY'],
         ['MISSION:', astronaut.bio.mission, 'EXPORT TIME:', exportDate],
-        ['CLASSIFICATION:', 'OFFICIAL / RESTRICTED', 'DATA SOURCE:', 'AHMS LIVE TELEMETRY'],
+        ['CLASSIFICATION:', 'OFFICIAL / RESTRICTED', 'DATA SOURCE:', 'ORBIT LIVE TELEMETRY'],
         [],
         ['--- 1. ASTRONAUT PROFILE & DOSSIER ---'],
         ['Crew ID', astronaut.bio.id],
@@ -84,42 +84,43 @@ export function exportAstronautToExcel(
         ['Radiation Exposure', `${astronaut.diagnostics.radiationStatus} (${astronaut.diagnostics.radiationPercent}%)`, '< 0.50 mSv/h', 'Shielded'],
         ['Suit Battery Reserve', `${astronaut.diagnostics.batteryPercent}%`, 'Min 20%', 'Adequate'],
         [],
-        ['--- 4. ACTIVE MEDICAL CONDITIONS & DIRECTIVES ---'],
-        ['Condition / Alert', 'Actions Taken', 'Flight Surgeon Recommendation'],
-        ...astronaut.alerts.map((alert) => [
-            alert.title,
-            alert.actionsTaken.join('; '),
-            alert.recommendedAction,
-        ]),
+        ['--- 4. NASA 5 HAZARDS (R.I.D.G.E.) AUTONOMOUS STATUS ---'],
+        ['Hazard Focus', 'Observed Biomarker / Metric', 'Threshold Envelope', 'Autonomous Status'],
+        ['[R] Space Radiation', `${astronaut.diagnostics.radiationStatus}`, '< 0.50 mSv/h', 'Storm Haven Ready'],
+        ['[I] Isolation & Confinement', 'Circadian Phase: Phase 1 • Sleep 84%', 'PVT Lapse < 2', 'SSLA Mode Active'],
+        ['[D] Distance from Earth', 'DSN Comm Delay: 14m 22s', 'Autonomous CDS Required', 'AHHI Active'],
+        ['[G] Gravity Fields', `Bone Loss: ${astronaut.bio.boneDensityLoss}`, '< 1.5% loss / month', 'ARED & LBNP Ready'],
+        ['[E] Hostile Closed Environment', 'ECLSS Cabin pCO2: 2.8 mmHg', '< 3.0 mmHg', 'Scrubbers Nominal'],
     ];
 
     const wsTelemetry = XLSX.utils.aoa_to_sheet(telemetrySheetData);
     wsTelemetry['!cols'] = [
+        { wch: 30 },
+        { wch: 36 },
         { wch: 28 },
-        { wch: 32 },
-        { wch: 26 },
-        { wch: 18 },
+        { wch: 24 },
         { wch: 20 },
     ];
     XLSX.utils.book_append_sheet(wb, wsTelemetry, 'Biometrics & Telemetry');
 
-    // --- SHEET 2: Telemetry Response Log ---
-    const logHeader = ['Timestamp (MET)', 'Incident / Event', 'Automated / Crew Response', 'Resolution Status'];
-    const logRows = astronaut.logs.map((log) => [
-        log.timestamp,
-        log.title,
-        log.action,
-        log.status || 'RESOLVED',
-    ]);
+    // --- SHEET 2: NASA 5 Hazards Autonomous Countermeasures Protocol ---
+    const countermeasureHeader = ['Countermeasure Protocol', 'Target Hazard', 'Execution Mode', 'NASA-STD-3001 Compliance'];
+    const countermeasureRows = [
+        ['ARED High-Resistance Loading (600 N)', 'Altered Gravity (Bone / Muscle)', 'Autonomous Execution', 'Fully Compliant'],
+        ['LBNP Decompression Garment (-35 mmHg)', 'Altered Gravity (SANS Fluid Shift)', 'Autonomous Execution', 'Fully Compliant'],
+        ['SSLA Dynamic Circadian Lighting', 'Isolation & Confinement (Sleep / Mood)', 'Automated Schedule', 'Fully Compliant'],
+        ['Storm Haven Radiation Vault Lockdown', 'Space Radiation (SPE / GCR)', 'Emergency Standby', 'Fully Compliant'],
+        ['ECLSS Amine-Bed CO2 Scrubber Boost', 'Hostile Closed Environment (pCO2)', 'Automated / Manual Override', 'Fully Compliant'],
+    ];
     const wsLogs = XLSX.utils.aoa_to_sheet([
-        ['NASA MISSION CONTROL • TELEMETRY EVENT & RESOLUTION LOG'],
+        ['ORBIT MISSION CONTROL • NASA 5 HAZARDS AUTONOMOUS COUNTERMEASURES'],
         ['ASTRONAUT:', `${astronaut.bio.name} (${astronaut.bio.id})`],
         [],
-        logHeader,
-        ...logRows,
+        countermeasureHeader,
+        ...countermeasureRows,
     ]);
-    wsLogs['!cols'] = [{ wch: 18 }, { wch: 30 }, { wch: 45 }, { wch: 18 }];
-    XLSX.utils.book_append_sheet(wb, wsLogs, 'Incident Logs');
+    wsLogs['!cols'] = [{ wch: 38 }, { wch: 32 }, { wch: 24 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, wsLogs, '5 Hazards Countermeasures');
 
     // --- SHEET 3: Complete Crew Dataset (if provided) ---
     if (allCrewDataset && allCrewDataset.length > 0) {
@@ -142,7 +143,7 @@ export function exportAstronautToExcel(
             c.Bone_Density_Loss || c.boneDensityLoss || '',
         ]);
         const wsDataset = XLSX.utils.aoa_to_sheet([
-            ['KAGGLE / NASA MISSION DATABASE ARCHIVE'],
+            ['NASA HUMAN RESEARCH PROGRAM (HRP) - 5 HAZARDS & TELEMETRY ARCHIVE'],
             [],
             datasetHeaders,
             ...datasetRows,
@@ -197,7 +198,7 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     // Title & Header Text
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(13);
-    doc.text('ASTRONAUT HEALTH MONITORING SYSTEM (AHMS)', 36, 11);
+    doc.text('ORBIT • ASTRONAUT HEALTH & TELEMETRY SYSTEM', 36, 11);
     doc.setFontSize(8);
     doc.setTextColor(92, 219, 223);
     doc.text('SPACE MEDICINE & LIFE SCIENCES DIVISION • JOHNSON SPACE CENTER', 36, 17);
@@ -244,7 +245,7 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
             { content: 'Bone Density Loss:', styles: { fontStyle: 'bold' } },
             astronaut.bio.boneDensityLoss,
             { content: 'Telemetry Hash:', styles: { fontStyle: 'bold' } },
-            `AHMS-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+            `ORBIT-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
         ],
     ];
 
@@ -398,24 +399,26 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     doc.setTextColor(10, 25, 47);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text('4. ACTIVE DETECTED CONDITIONS & INTERVENTIONS', 14, currentY);
+    doc.text('4. NASA 5 HAZARDS (R.I.D.G.E.) AUTONOMOUS EVALUATION', 14, currentY);
 
     currentY += 4;
 
-    const alertHeaders = ['Condition Detected', 'Automated / Crew Actions Taken', 'Surgeon Recommended Directive'];
-    const alertRows = astronaut.alerts.map((alert) => [
-        alert.title,
-        alert.actionsTaken.join('\n• '),
-        alert.recommendedAction,
-    ]);
+    const hazardHeaders = ['NASA Spaceflight Hazard', 'Biomedical Indicator', 'Safety Tolerance', 'Autonomous Countermeasure'];
+    const hazardRows = [
+        ['[R] Space Radiation', astronaut.diagnostics.radiationStatus, '< 0.50 mSv/h', 'Storm Haven Secondary Shielding'],
+        ['[I] Isolation & Confinement', 'Circadian Phase: Phase 1 • Sleep 84%', 'PVT Lapse < 2', 'SSLA Blue-Depleted Lighting'],
+        ['[D] Distance from Earth', 'DSN Comm Latency: 14m 22s', 'Autonomous CDS Required', 'ORBIT Algorithmic Health Engine'],
+        ['[G] Gravity Fields', `Bone Loss: ${astronaut.bio.boneDensityLoss}`, '< 1.5% loss / mo', 'ARED 600N & LBNP Garment'],
+        ['[E] Hostile Closed Environment', 'ECLSS Cabin pCO2: 2.8 mmHg', '< 3.0 mmHg', 'Amine-Bed Desiccant CO2 Scrubber'],
+    ];
 
     autoTable(doc, {
         startY: currentY,
-        head: [alertHeaders],
-        body: alertRows,
+        head: [hazardHeaders],
+        body: hazardRows,
         theme: 'grid',
         headStyles: {
-            fillColor: [180, 83, 9], // Amber/Orange
+            fillColor: [14, 116, 144], // Cyan/Teal
             textColor: [255, 255, 255],
             fontSize: 8.5,
             fontStyle: 'bold',
@@ -426,15 +429,16 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
         },
         columnStyles: {
             0: { cellWidth: 50 },
-            1: { cellWidth: 80 },
-            2: { cellWidth: 56 },
+            1: { cellWidth: 50 },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 46 },
         },
         margin: { left: 14, right: 14 },
     });
 
     currentY = (doc as any).lastAutoTable.finalY + 6;
 
-    // 6. Response History / Mission Log
+    // 5. Autonomous Countermeasures Protocol
     if (currentY > 230) {
         doc.addPage();
         currentY = 20;
@@ -443,22 +447,23 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     doc.setTextColor(10, 25, 47);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text('5. TELEMETRY RESPONSE & RESOLUTION LOG', 14, currentY);
+    doc.text('5. NASA 5 HAZARDS AUTONOMOUS COUNTERMEASURES PROTOCOL', 14, currentY);
 
     currentY += 4;
 
-    const logHeaders = ['Timestamp', 'Incident / Telemetry Shift', 'Automated Suit Action Taken', 'Status'];
-    const logTableRows = astronaut.logs.map((log) => [
-        log.timestamp,
-        log.title,
-        log.action,
-        log.status || 'RESOLVED',
-    ]);
+    const countermeasureHeaders = ['Protocol Name', 'Target Spaceflight Hazard', 'Autonomous Mode', 'NASA-STD-3001 Compliance'];
+    const countermeasureTableRows = [
+        ['ARED High-Resistance Loading (600 N)', 'Altered Gravity (Bone / Muscle Atrophy)', 'Autonomous Execution', 'Fully Verified'],
+        ['LBNP Decompression Garment (-35 mmHg)', 'Altered Gravity (SANS Cephalad Fluid Shift)', 'Autonomous Execution', 'Fully Verified'],
+        ['SSLA Dynamic Circadian Lighting', 'Isolation & Confinement (Sleep / Circadian)', 'Automated Schedule', 'Fully Verified'],
+        ['Storm Haven Radiation Vault Lockdown', 'Space Radiation (SPE / Galactic Cosmic Rays)', 'Emergency Standby', 'Fully Verified'],
+        ['ECLSS Amine-Bed CO2 Scrubber Boost', 'Hostile Closed Environment (pCO2 Purge)', 'Automated / Manual', 'Fully Verified'],
+    ];
 
     autoTable(doc, {
         startY: currentY,
-        head: [logHeaders],
-        body: logTableRows,
+        head: [countermeasureHeaders],
+        body: countermeasureTableRows,
         theme: 'striped',
         headStyles: {
             fillColor: [30, 41, 59],
@@ -485,7 +490,7 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     doc.roundedRect(14, currentY, pageWidth - 28, 24, 2, 2, 'FD');
     doc.setFontSize(8);
     doc.setTextColor(71, 85, 105);
-    doc.text('MEDICAL SIGN-OFF & TELEMETRY VERIFICATION:', 18, currentY + 6);
+    doc.text('ORBIT AUTONOMOUS MEDICAL OPERATIONS CLEARANCE', 18, currentY + 6);
     doc.text('FLIGHT SURGEON: DR. R. CHEN, MD (NASA BIO-OPS)', 18, currentY + 12);
     doc.text(`DIGITAL SIGNATURE HASH: SHA256-${Math.random().toString(36).substring(2, 14).toUpperCase()}`, 18, currentY + 18);
 
@@ -499,7 +504,7 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
         doc.setFontSize(7.5);
         doc.setTextColor(148, 163, 184);
         doc.text(
-            `NASA AHMS Medical Telemetry • Page ${i} of ${totalPages} • Security Clearance: UNCLASSIFIED / BIO-PUB`,
+            `ORBIT Medical Telemetry • Page ${i} of ${totalPages} • Security Clearance: UNCLASSIFIED / BIO-PUB`,
             pageWidth / 2,
             doc.internal.pageSize.getHeight() - 6,
             { align: 'center' }
@@ -507,7 +512,7 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     }
 
     const cleanName = astronaut.bio.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-    const filename = `NASA_Health_Report_${cleanName}_${timestamp}.pdf`;
+    const filename = `ORBIT_Health_Report_${cleanName}_${timestamp}.pdf`;
     doc.save(filename);
 }
 
@@ -542,7 +547,7 @@ export function exportAstronautToCsv(astronaut: AstronautFullData): void {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     const cleanName = astronaut.bio.name.replace(/\s+/g, '_');
-    link.setAttribute('download', `NASA_Telemetry_${cleanName}_${timestamp}.csv`);
+    link.setAttribute('download', `ORBIT_Telemetry_${cleanName}_${timestamp}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -555,9 +560,9 @@ export function exportAstronautToJson(astronaut: AstronautFullData): void {
     const timestamp = getTimestampStr();
     const exportPayload = {
         meta: {
-            system: 'NASA Astronaut Health Monitoring System (AHMS)',
+            system: 'ORBIT - Autonomous Spaceflight Health Monitoring System',
             exportedAt: new Date().toISOString(),
-            version: '2.4.0',
+            version: '3.0.0',
         },
         astronaut,
     };
@@ -566,7 +571,7 @@ export function exportAstronautToJson(astronaut: AstronautFullData): void {
     const link = document.createElement('a');
     link.setAttribute('href', dataStr);
     const cleanName = astronaut.bio.name.replace(/\s+/g, '_');
-    link.setAttribute('download', `NASA_Telemetry_${cleanName}_${timestamp}.json`);
+    link.setAttribute('download', `ORBIT_Telemetry_${cleanName}_${timestamp}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

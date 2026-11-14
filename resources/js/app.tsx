@@ -7,7 +7,7 @@ import { initializeTheme } from '@/hooks/use-appearance';
 import NasaChatbot from '@/components/nasa-chatbot';
 import './echo';
 
-const appName = import.meta.env.VITE_APP_NAME || 'NASA Health Monitoring System';
+const appName = import.meta.env.VITE_APP_NAME || 'ORBIT';
 
 void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
