@@ -6,17 +6,17 @@ import {
     Database, Search, Sparkles, RefreshCw, Radio, Zap,
     Play, Pause, Wind, Shield, Settings, ClipboardList, Send, X,
     Clock, Heart, Volume2, VolumeX, Users, Layers, Expand,
-    CheckCircle2, ArrowUpRight, ArrowLeft, ChevronRight
+    Ellipsis, CheckCircle2, ArrowUpRight, ArrowLeft, ChevronRight, Flame, Droplet
 } from 'lucide-react';
 import NasaLogo from '@/components/nasa-logo';
 import Astronaut3DModel from '@/components/astronaut-3d-model';
 import TelemetryImportModal from '@/components/telemetry-import-modal';
 import TelemetryExportModal from '@/components/telemetry-export-modal';
 import SuitSystemsModal from '@/components/suit-systems-modal';
-import BiometricsDetailModal from '@/components/biometrics-detail-modal';
+import BiometricsDetailModal, { type BiometricKey } from '@/components/biometrics-detail-modal';
 import SystemSettingsModal from '@/components/system-settings-modal';
 import CrewSwitcherModal from '@/components/crew-switcher-modal';
-import AstronautSelfAssessmentModal from '@/components/astronaut-self-assessment-modal';
+import AstronautSelfAssessmentModal, { type MissionHazard } from '@/components/astronaut-self-assessment-modal';
 import type {
     AstronautFullData,
     ParsedImportPayload,
@@ -24,6 +24,10 @@ import type {
     MedicalAlert
 } from '@/types/astronaut';
 import { toast } from 'sonner';
+
+function formatEvaStatus(status: string) {
+    return status.charAt(0) + status.slice(1).toLowerCase();
+}
 
 // Default initial astronaut: CDR. Elena Rovani
 const DEFAULT_ASTRONAUT: AstronautFullData = {
@@ -259,9 +263,29 @@ function generateAstronautProfile(record: any, timeStr: string): AstronautFullDa
     };
 }
 
+const biometricKeys = ['heartRate', 'spO2', 'respiration', 'coreTemp', 'hydration'] as const;
+
 export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     // Active astronaut data
     const [activeAstronaut, setActiveAstronaut] = useState<AstronautFullData>(DEFAULT_ASTRONAUT);
+    const [showLowVitalsDemo, setShowLowVitalsDemo] = useState(true);
+
+    const { id: crewId } = activeAstronaut.bio;
+    const { vitals } = activeAstronaut;
+    const [biometricHistory, setBiometricHistory] = useState<{ crewId: string; readings: number[][] }>({
+        crewId,
+        readings: [],
+    });
+    const readings = biometricHistory.crewId === crewId ? biometricHistory.readings : [];
+
+    useEffect(() => {
+        const sample = biometricKeys.map((key) => vitals[key].numericValue);
+        setBiometricHistory((previous) => {
+            const recent = previous.crewId === crewId ? previous.readings : [];
+            if (recent.at(-1)?.every((value, index) => Object.is(value, sample[index]))) return previous;
+            return { crewId, readings: [...recent.slice(-19), sample] };
+        });
+    }, [crewId, vitals]);
 
     // Database crew roster
     const [crewList, setCrewList] = useState<any[]>(() => initialData?.records || []);
@@ -271,9 +295,11 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isSuitModalOpen, setIsSuitModalOpen] = useState(false);
     const [isBiometricsModalOpen, setIsBiometricsModalOpen] = useState(false);
+    const [selectedBiometric, setSelectedBiometric] = useState<BiometricKey | null>(null);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isCrewSwitcherOpen, setIsCrewSwitcherOpen] = useState(false);
     const [isSelfAssessmentOpen, setIsSelfAssessmentOpen] = useState(false);
+    const [selectedHazard, setSelectedHazard] = useState<MissionHazard | null>(null);
     const [selfAssessmentResult, setSelfAssessmentResult] = useState<{
         score: number;
         status: 'NOMINAL' | 'GUARDED' | 'ELEVATED' | 'CRITICAL';
@@ -284,6 +310,8 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     // EVA status selector dropdown state
     const [isEvaSelectorOpen, setIsEvaSelectorOpen] = useState(false);
     const evaSelectorRef = useRef<HTMLDivElement>(null);
+    const headerActionsRef = useRef<HTMLDivElement>(null);
+    const [isHeaderActionsOpen, setIsHeaderActionsOpen] = useState(false);
 
     // Real-Time Reverb WebSocket state
     const [isReverbConnected, setIsReverbConnected] = useState(true);
@@ -301,6 +329,44 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
 
     // Synchronize activeAstronautRef
     const activeAstronautRef = useRef(activeAstronaut);
+    const dashboardRef = useRef<HTMLDivElement>(null);
+    const saturnRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const dashboard = dashboardRef.current;
+        const saturn = saturnRef.current;
+        if (!dashboard || !saturn) return;
+
+        let frame = 0;
+        const update = () => {
+            frame = 0;
+            const planet = saturn.getBoundingClientRect();
+            const lightX = planet.left + planet.width / 2;
+            const lightY = planet.top + planet.height * .43;
+            for (const card of dashboard.querySelectorAll<HTMLElement>('.orbit-glass')) {
+                const bounds = card.getBoundingClientRect();
+                const dx = lightX - bounds.left - bounds.width / 2;
+                const dy = lightY - bounds.top - bounds.height / 2;
+                card.style.setProperty('--glass-light-angle', `${Math.atan2(dx, -dy)}rad`);
+            }
+        };
+        const schedule = () => {
+            if (!frame) frame = requestAnimationFrame(update);
+        };
+        const observer = new ResizeObserver(schedule);
+        observer.observe(dashboard);
+        for (const card of dashboard.querySelectorAll('.orbit-glass')) observer.observe(card);
+        window.addEventListener('resize', schedule);
+        window.addEventListener('scroll', schedule, { passive: true });
+        schedule();
+
+        return () => {
+            cancelAnimationFrame(frame);
+            observer.disconnect();
+            window.removeEventListener('resize', schedule);
+            window.removeEventListener('scroll', schedule);
+        };
+    }, [activeAstronaut.bio.id]);
     useEffect(() => {
         activeAstronautRef.current = activeAstronaut;
     }, [activeAstronaut]);
@@ -315,12 +381,14 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     // Close EVA dropdown on outside click or Escape key
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
+            if (!headerActionsRef.current?.contains(event.target as Node)) setIsHeaderActionsOpen(false);
             if (evaSelectorRef.current && !evaSelectorRef.current.contains(event.target as Node)) {
                 setIsEvaSelectorOpen(false);
             }
         }
         function handleKeyDown(event: KeyboardEvent) {
             if (event.key === 'Escape') {
+                setIsHeaderActionsOpen(false);
                 setIsEvaSelectorOpen(false);
                 setIsCrewSwitcherOpen(false);
             }
@@ -514,6 +582,7 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     // Select astronaut from crew roster
     const handleSelectAstronaut = (record: any) => {
         const profile = generateAstronautProfile(record, currentTimeStr);
+        setShowLowVitalsDemo(false);
         setActiveAstronaut(profile);
         toast.info(`Active Crew Member: ${profile.bio.name} (${profile.bio.id})`);
     };
@@ -554,88 +623,68 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     };
 
     return (
-        <div className="min-h-screen bg-[#030914] text-slate-200 font-sans p-3 sm:p-4 pb-24 sm:pb-28 flex flex-col gap-3 select-none relative overflow-x-hidden">
-            {/* Subtle Cosmic Background Lighting */}
-            <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-[#0b3d91]/15 rounded-full blur-[140px]" />
-                <div className="absolute bottom-10 left-10 w-[400px] h-[400px] bg-[#0284c7]/10 rounded-full blur-[150px]" />
-                <div
-                    className="absolute inset-0 opacity-[0.03]"
-                    style={{
-                        backgroundImage:
-                            'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)',
-                        backgroundSize: '36px 36px',
-                    }}
-                />
-            </div>
+        <div ref={dashboardRef} className="orbit-dashboard min-h-screen text-slate-200 font-sans px-3 pt-3 pb-24 sm:px-5 sm:pt-5 sm:pb-28 flex flex-col gap-4 select-none relative overflow-x-hidden">
+            <div ref={saturnRef} aria-hidden="true" className="orbit-saturn" />
+            {/*
+                Gentle displacement of the wallpaper behind the glass.
+                CSS supplies frosted blur on browsers that fall back from SVG backdrop filters.
+            */}
+            <svg aria-hidden="true" width="0" height="0" className="pointer-events-none absolute">
+                <defs>
+                    <filter id="orbit-glass-refraction" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.018 0.04" numOctaves="1" seed="7" result="refraction" />
+                        <feDisplacementMap in="SourceGraphic" in2="refraction" scale="11" xChannelSelector="R" yChannelSelector="G" />
+                    </filter>
+                </defs>
+            </svg>
 
-            {/* MASTER MISSION CONTROL COMMAND BAR (All navigation, status & actions consolidated into 1 clean bar) */}
-            <header className="relative z-30 rounded-xl border border-[#132c4a] bg-[#06121e]/95 px-3.5 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shadow-xl">
-                {/* Left: Brand + Active Crew Chip */}
-                <div className="flex items-center gap-3">
-                    <div className="p-1 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] shadow-md shadow-[#5cdbdf]/10 shrink-0">
-                        <NasaLogo size={26} />
-                    </div>
-
-                    <div>
-                        <div className="flex items-center gap-1.5 font-mono">
-                            <span className="font-bold text-white text-xs sm:text-sm tracking-wider">ORBIT</span>
-                            <span className="text-[10px] text-cyan-400 font-bold hidden sm:inline">// NASA HRP</span>
+            <header className="orbit-glass orbit-command-bar relative z-30 flex flex-wrap items-center justify-between gap-x-7 gap-y-3 px-3 py-3 sm:px-4">
+                <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                    <div className="flex shrink-0 items-center gap-2.5">
+                        <NasaLogo size={30} />
+                        <div>
+                            <div className="text-xl leading-none font-bold tracking-tight text-white">ORBIT</div>
+                            <div className="mt-0.5 text-xs text-slate-400">NASA HRP</div>
                         </div>
                     </div>
-
-                    <div className="h-5 w-px bg-[#132c4a] hidden sm:block mx-1" />
-
-                    {/* Active Crew Quick Selector Chip */}
                     <button
                         type="button"
                         onClick={() => setIsCrewSwitcherOpen(true)}
-                        className="flex items-center gap-2 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] hover:border-[#5cdbdf] px-2.5 py-1 text-xs text-white transition-all cursor-pointer group shadow-sm"
-                        title="Click to Switch Crew Member"
+                        className="orbit-header-control orbit-glass-inset min-w-0"
+                        title="Switch crew member"
                     >
-                        <div className="w-5 h-5 rounded bg-[#132c4a] flex items-center justify-center text-[10px] text-[#5cdbdf] font-mono font-bold group-hover:bg-[#5cdbdf] group-hover:text-black transition-colors">
-                            {activeAstronaut.bio.name.charAt(0)}
-                        </div>
-                        <span className="font-bold text-xs truncate max-w-[120px] sm:max-w-[170px]">{activeAstronaut.bio.name}</span>
-                        <span className="text-[10px] text-[#5cdbdf] font-mono">({activeAstronaut.bio.id})</span>
-                        <span className="hidden sm:inline-flex items-center gap-1.5 border-l border-[#1a4b6c] pl-2 text-[10px] font-mono">
-                            <span className="text-amber-400 font-semibold">{activeAstronaut.bio.age}y</span>
-                            <span className="text-slate-500">•</span>
-                            <span className="text-sky-300 font-semibold">{activeAstronaut.bio.missionDurationDays}d</span>
-                        </span>
-                        <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-white" />
+                        <span className="truncate">{activeAstronaut.bio.name}</span>
+                        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-slate-400" />
                     </button>
+                </div>
 
-                    {/* EVA Status Selector */}
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <span className="flex items-center gap-1.5 text-xs text-slate-300 tabular-nums" title="Mission clock">
+                        <Clock aria-hidden="true" className="size-3.5 text-slate-400" />
+                        {currentTimeStr}
+                    </span>
                     <div className="relative" ref={evaSelectorRef}>
                         <button
                             type="button"
+                            aria-expanded={isEvaSelectorOpen}
                             onClick={() => setIsEvaSelectorOpen(!isEvaSelectorOpen)}
-                            className="flex items-center gap-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] hover:border-[#5cdbdf] px-2.5 py-1 text-xs transition-all cursor-pointer"
-                            title="Update EVA Operational State"
+                            className="orbit-header-control orbit-glass-inset"
+                            title="Update EVA status"
                         >
-                            <span className={`w-2 h-2 rounded-full ${
-                                activeAstronaut.bio.evaStatus === 'ON-GOING'
-                                    ? 'bg-amber-400 animate-pulse'
-                                    : activeAstronaut.bio.evaStatus === 'ABORTED'
-                                    ? 'bg-rose-500'
-                                    : 'bg-emerald-400'
-                            }`} />
-                            <span className="text-[11px] text-slate-200 font-mono font-bold">{activeAstronaut.bio.evaStatus}</span>
-                            <ChevronDown className="w-3 h-3 text-slate-400" />
+                            <span className={`size-1.5 shrink-0 rounded-full ${activeAstronaut.bio.evaStatus === 'ABORTED' ? 'bg-rose-400' : activeAstronaut.bio.evaStatus === 'ON-GOING' ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                            <span>EVA {formatEvaStatus(activeAstronaut.bio.evaStatus)}</span>
+                            <ChevronDown aria-hidden="true" className="size-3.5 text-slate-400" />
                         </button>
-
-                        {/* EVA Dropdown */}
                         {isEvaSelectorOpen && (
-                            <div className="absolute top-full left-0 mt-1 w-40 rounded-lg bg-[#06121e] border border-[#1a4b6c] shadow-2xl z-50 p-1 flex flex-col font-mono text-xs divide-y divide-[#132c4a]">
-                                {(['ON-GOING', 'STANDBY', 'SCHEDULED', 'COMPLETED', 'ABORTED'] as const).map((st) => (
+                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-40 p-1.5">
+                                {(['ON-GOING', 'STANDBY', 'SCHEDULED', 'COMPLETED', 'ABORTED'] as const).map((status) => (
                                     <button
-                                        key={st}
+                                        key={status}
                                         type="button"
-                                        onClick={() => handleSetEvaStatus(st)}
-                                        className="text-left px-2.5 py-1.5 hover:bg-[#0a1f2e] text-slate-300 hover:text-white transition-colors cursor-pointer text-[11px]"
+                                        onClick={() => handleSetEvaStatus(status)}
+                                        className="orbit-header-option"
                                     >
-                                        {st}
+                                        {formatEvaStatus(status)}
                                     </button>
                                 ))}
                             </div>
@@ -643,353 +692,145 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                     </div>
                 </div>
 
-                {/* Center: Clean Spaceflight Telemetry Status Strip */}
-                <div className="hidden lg:flex items-center gap-3 text-[11px] font-mono bg-[#030b14]/90 border border-[#132c4a] rounded-lg px-3 py-1">
-                    <div className="flex items-center gap-1.5 text-white">
-                        <Clock className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                        <span>{currentTimeStr}</span>
-                    </div>
-                    <span className="text-slate-600">•</span>
-                    <div className="flex items-center gap-1.5 text-emerald-400">
-                        <Radio className="w-3.5 h-3.5 animate-pulse" />
-                        <span>DSN: LOCKED (40ms)</span>
-                    </div>
-                    <span className="text-slate-600">•</span>
-                    <div className="flex items-center gap-1.5 text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span>WS: REVERB (8080)</span>
-                    </div>
-                </div>
-
-                {/* Right: Consolidated Console Modals & System Tools */}
-                <div className="flex items-center gap-2 text-xs font-mono">
-                    {/* Console Views Group */}
-                    <div className="flex items-center rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] p-0.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <button type="button" className="orbit-header-control" onClick={() => setIsBiometricsModalOpen(true)}>
+                        <Heart aria-hidden="true" className="size-3.5 text-cyan-200" />
+                        Biometrics
+                    </button>
+                    <button type="button" className="orbit-header-control" onClick={() => setIsSuitModalOpen(true)}>
+                        <Shield aria-hidden="true" className="size-3.5 text-cyan-200" />
+                        Suit
+                    </button>
+                    <div ref={headerActionsRef} className="relative">
                         <button
                             type="button"
-                            onClick={() => setIsBiometricsModalOpen(true)}
-                            className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-[#132c4a] transition-colors text-[11px] flex items-center gap-1"
-                            title="Detailed Biometrics Analysis"
+                            className="orbit-header-control orbit-glass-inset"
+                            aria-expanded={isHeaderActionsOpen}
+                            onClick={() => setIsHeaderActionsOpen(!isHeaderActionsOpen)}
                         >
-                            <Heart className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">Biometrics</span>
+                            <Ellipsis aria-hidden="true" className="size-4" />
+                            More
                         </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsSuitModalOpen(true)}
-                            className="px-2 py-1 rounded text-slate-300 hover:text-white hover:bg-[#132c4a] transition-colors text-[11px] flex items-center gap-1"
-                            title="Suit & Environmental Console"
-                        >
-                            <Shield className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">Suit</span>
-                        </button>
-
-                        <Link
-                            href="/dataset"
-                            className="px-2 py-1 rounded text-[#5cdbdf] hover:text-white hover:bg-[#132c4a] transition-colors text-[11px] flex items-center gap-1 font-bold"
-                            title="Open NASA Human Research Program (HRP) 5 Hazards & Telemetry Archive"
-                        >
-                            <Database className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">5 Hazards ({effectiveCrewList.length})</span>
-                        </Link>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="px-2.5 py-1 rounded text-cyan-300 hover:text-white bg-cyan-950/70 border border-cyan-700 hover:border-cyan-400 transition-colors text-[11px] flex items-center gap-1 font-bold shadow-[0_0_8px_rgba(6,182,212,0.15)] cursor-pointer"
-                            title="Open NASA 5 Hazards Autonomous Self-Assessment & Action Suite"
-                        >
-                            <Shield className="w-3 h-3 text-[#5cdbdf]" />
-                            <span className="hidden xl:inline">Self-Assessment</span>
-                            {selfAssessmentResult && (
-                                <span className="ml-0.5 px-1 py-0.2 text-[9px] rounded bg-cyan-900 text-cyan-200">
-                                    {selfAssessmentResult.score}%
-                                </span>
-                            )}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsSettingsModalOpen(true)}
-                            className="p-1 rounded text-slate-300 hover:text-white hover:bg-[#132c4a] transition-colors"
-                            title="System Settings"
-                        >
-                            <Settings className="w-3 h-3 text-[#5cdbdf]" />
-                        </button>
-                    </div>
-
-                    {/* System Action Tools */}
-                    <div className="flex items-center gap-1">
-                        <Link
-                            href="/dataset"
-                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all shadow-sm flex items-center gap-1"
-                            title="Open NASA 5 Hazards & Telemetry Archive"
-                        >
-                            <Database className="w-3.5 h-3.5" />
-                        </Link>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsImportModalOpen(true)}
-                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:border-[#5cdbdf] hover:text-white transition-all cursor-pointer shadow-sm"
-                            title="Import Telemetry Records"
-                        >
-                            <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsExportModalOpen(true)}
-                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:border-[#5cdbdf] hover:text-white transition-all cursor-pointer shadow-sm"
-                            title="Export Telemetry Data"
-                        >
-                            <Download className="w-3.5 h-3.5 text-emerald-400" />
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={handleTriggerReverbPing}
-                            disabled={isPingingReverb}
-                            className="p-1.5 rounded-lg border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:border-[#5cdbdf] hover:text-white transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                            title="Dispatch Instant Telemetry Ping"
-                        >
-                            <Zap className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const next = !isAutoLiveStream;
-                                setIsAutoLiveStream(next);
-                                toast.info(next ? 'Live Reverb stream: ACTIVE (3s cadence)' : 'Live stream: PAUSED');
-                            }}
-                            className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-sm ${
-                                isAutoLiveStream
-                                    ? 'border-emerald-400 bg-emerald-950 text-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.3)]'
-                                    : 'border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf]'
-                            }`}
-                            title={isAutoLiveStream ? 'Continuous Auto-Stream is ON' : 'Turn Continuous Auto-Stream ON'}
-                        >
-                            <Radio className={`w-3.5 h-3.5 ${isAutoLiveStream ? 'animate-pulse text-emerald-400' : ''}`} />
-                        </button>
+                        {isHeaderActionsOpen && (
+                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-52 p-1.5" onClick={(event) => {
+                                if ((event.target as HTMLElement).closest('button, a[href]')) setIsHeaderActionsOpen(false);
+                            }}>
+                                <Link href="/dataset" className="orbit-header-option"><Database aria-hidden="true" className="size-4" /> Hazards and archive</Link>
+                                <button type="button" className="orbit-header-option" onClick={() => setIsSelfAssessmentOpen(true)}>
+                                    <Shield aria-hidden="true" className="size-4" /> Self-assessment
+                                    {selfAssessmentResult && <span className="ml-auto text-cyan-200">{selfAssessmentResult.score}%</span>}
+                                </button>
+                                <button type="button" className="orbit-header-option" onClick={() => setIsSettingsModalOpen(true)}><Settings aria-hidden="true" className="size-4" /> Settings</button>
+                                <button type="button" className="orbit-header-option" onClick={() => setIsImportModalOpen(true)}><Upload aria-hidden="true" className="size-4" /> Import telemetry</button>
+                                <button type="button" className="orbit-header-option" onClick={() => setIsExportModalOpen(true)}><Download aria-hidden="true" className="size-4" /> Export telemetry</button>
+                                <button type="button" className="orbit-header-option" onClick={handleTriggerReverbPing} disabled={isPingingReverb}><Zap aria-hidden="true" className="size-4" /> Send telemetry ping</button>
+                                <button type="button" className="orbit-header-option" onClick={() => {
+                                    const next = !isAutoLiveStream;
+                                    setIsAutoLiveStream(next);
+                                    toast.info(next ? 'Live telemetry started' : 'Live telemetry paused');
+                                }}>
+                                    <Radio aria-hidden="true" className="size-4" /> {isAutoLiveStream ? 'Pause live telemetry' : 'Start live telemetry'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
 
-            {/* NASA HUMAN RESEARCH PROGRAM (HRP) 5 HAZARDS AUTONOMOUS MONITOR STRIP (R.I.D.G.E.) */}
-            <div className="relative z-10 rounded-xl border border-[#132c4a] bg-[#06121e]/90 p-2.5 shadow-lg font-mono">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#0a1f2e] border border-[#1a4b6c] text-[#5cdbdf] text-[11px] font-bold">
-                            <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                            <span>NASA 5 HAZARDS (R.I.D.G.E.)</span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 hidden xl:inline">
-                            Autonomous Astronaut Health & Countermeasures
-                        </span>
+            <section aria-labelledby="orbit-hazards-title" className="orbit-glass relative z-10 p-3 sm:p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                        <Shield aria-hidden="true" className="size-4 shrink-0 text-cyan-200" />
+                        <h2 id="orbit-hazards-title" className="orbit-section-title">Mission hazards</h2>
+                        <span className="text-xs text-slate-400">RIDGE</span>
                     </div>
-
-                    {/* 5 Hazard Live Indicator Quick Cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 flex-1 max-w-4xl">
-                        {/* R - Radiation */}
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-amber-400/70 transition-all text-left group cursor-pointer"
-                            title="Space Radiation: Dosimetry, GCR & SPE acute risk"
-                        >
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-bold text-amber-400 group-hover:text-amber-300">[R] RADIATION</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            </div>
-                            <div className="text-[10px] text-slate-300 truncate font-semibold">0.18 mSv/h • Safe</div>
-                            <div className="text-[9px] text-slate-400 truncate">Storm Haven: Ready</div>
-                        </button>
-
-                        {/* I - Isolation */}
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-purple-400/70 transition-all text-left group cursor-pointer"
-                            title="Isolation & Confinement: Circadian Rhythms & Cognitive Alertness"
-                        >
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-bold text-purple-400 group-hover:text-purple-300">[I] ISOLATION</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            </div>
-                            <div className="text-[10px] text-slate-300 truncate font-semibold">Circadian: Phase 1</div>
-                            <div className="text-[9px] text-slate-400 truncate">Sleep: 84% • SSLA Active</div>
-                        </button>
-
-                        {/* D - Distance */}
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-sky-400/70 transition-all text-left group cursor-pointer"
-                            title="Distance from Earth: Autonomous Triage & 14-min DSN Latency"
-                        >
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-bold text-sky-400 group-hover:text-sky-300">[D] DISTANCE</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                            </div>
-                            <div className="text-[10px] text-slate-300 truncate font-semibold">DSN Delay: 14m 22s</div>
-                            <div className="text-[9px] text-slate-400 truncate">Autonomous CDS: Active</div>
-                        </button>
-
-                        {/* G - Gravity */}
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-rose-400/70 transition-all text-left group cursor-pointer"
-                            title="Gravity Fields: Bone Loss, Muscle Atrophy & SANS Fluid Shift"
-                        >
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-bold text-rose-400 group-hover:text-rose-300">[G] GRAVITY</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                            </div>
-                            <div className="text-[10px] text-slate-300 truncate font-semibold">Bone: {activeAstronaut.bio.boneDensityLoss}</div>
-                            <div className="text-[9px] text-slate-400 truncate">ARED & LBNP: Ready</div>
-                        </button>
-
-                        {/* E - Environment */}
-                        <button
-                            type="button"
-                            onClick={() => setIsSelfAssessmentOpen(true)}
-                            className="p-1.5 rounded border border-[#1a4b6c] bg-[#081726] hover:border-emerald-400/70 transition-all text-left group cursor-pointer"
-                            title="Hostile Environment: ECLSS CO2, Microbes & Life Support"
-                        >
-                            <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-bold text-emerald-400 group-hover:text-emerald-300">[E] ENVIRONMENT</span>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            </div>
-                            <div className="text-[10px] text-slate-300 truncate font-semibold">ECLSS pCO2: 2.8 mmHg</div>
-                            <div className="text-[9px] text-slate-400 truncate">Air Quality: Nominal</div>
-                        </button>
-                    </div>
-
-                    {/* Self-Assessment Quick Trigger */}
                     <button
                         type="button"
                         onClick={() => setIsSelfAssessmentOpen(true)}
-                        className="px-3 py-2 rounded-lg bg-gradient-to-r from-[#0284c7] to-[#0ea5e9] hover:from-[#0369a1] hover:to-[#0284c7] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-[0_0_12px_rgba(14,165,233,0.3)] shrink-0 cursor-pointer"
+                        className="orbit-header-control orbit-glass-inset"
                     >
-                        <Activity className="w-3.5 h-3.5" />
-                        <span>EVALUATE & ACT</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        Self-assessment
+                        <ChevronRight aria-hidden="true" className="size-3.5 text-cyan-200" />
                     </button>
                 </div>
-            </div>
-
-            {/* MAIN 3-COLUMN MISSION CONTROL COCKPIT */}
-            <div className="relative z-10 grid grid-cols-12 gap-3.5 flex-1">
-                {/* ------------------------------------------------------------- */}
-                {/* LEFT COLUMN: Biometrics Telemetry & Real-Time Rhythms         */}
-                {/* ------------------------------------------------------------- */}
-                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3">
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3.5 flex flex-col h-full shadow-lg">
-                        {/* Section Header */}
-                        <div className="flex items-center justify-between border-b border-[#132c4a] pb-2.5 mb-3 font-mono">
-                            <div className="flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-[#5cdbdf]" />
-                                <h2 className="text-xs font-bold tracking-wider text-white">BIOMETRICS TELEMETRY</h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                                className="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer flex items-center gap-1"
-                            >
-                                <span>Deep View</span>
-                                <ArrowUpRight className="w-3 h-3" />
-                            </button>
-                        </div>
-
-                        {/* Vitals Stack */}
-                        <div className="flex flex-col gap-2.5 flex-1 justify-between font-mono">
-                            {/* Primary Featured: Heart Rate ECG */}
-                            <VitalCard
-                                title={activeAstronaut.vitals.heartRate.title}
-                                value={activeAstronaut.vitals.heartRate.value}
-                                status={activeAstronaut.vitals.heartRate.status}
-                                color={activeAstronaut.vitals.heartRate.color}
-                                type="ecg"
-                                isPrimary
-                                baseline="Baseline: 60 - 100 bpm"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                            />
-
-                            {/* Secondary Metrics */}
-                            <VitalCard
-                                title={activeAstronaut.vitals.spO2.title}
-                                value={activeAstronaut.vitals.spO2.value}
-                                color={activeAstronaut.vitals.spO2.color}
-                                type="sine"
-                                baseline="Baseline: 95 - 100%"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                            />
-
-                            <VitalCard
-                                title={activeAstronaut.vitals.coreTemp.title}
-                                value={activeAstronaut.vitals.coreTemp.value}
-                                status={activeAstronaut.vitals.coreTemp.status}
-                                color={activeAstronaut.vitals.coreTemp.color}
-                                type="ecg"
-                                baseline="Baseline: 36.5 - 37.5°C"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                            />
-
-                            <VitalCard
-                                title={activeAstronaut.vitals.respiration.title}
-                                value={activeAstronaut.vitals.respiration.value}
-                                color={activeAstronaut.vitals.respiration.color}
-                                type="slow-sine"
-                                baseline="Baseline: 12 - 20 bpm"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                            />
-
-                            <VitalCard
-                                title={activeAstronaut.vitals.hydration.title}
-                                value={activeAstronaut.vitals.hydration.value}
-                                status=""
-                                color={activeAstronaut.vitals.hydration.color}
-                                valueColor={activeAstronaut.vitals.hydration.valueColor}
-                                type="flat"
-                                baseline="Baseline: 80 - 100%"
-                                onClick={() => setIsBiometricsModalOpen(true)}
-                            />
-                        </div>
-                    </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {([
+                        { label: 'Radiation', value: '0.18 mSv/h', detail: 'Storm Haven ready', status: 'Safe', dot: 'bg-emerald-400' },
+                        { label: 'Isolation', value: 'Circadian phase 1', detail: 'Sleep 84% · SSLA active', status: 'SSLA active', dot: 'bg-emerald-400' },
+                        { label: 'Distance', value: '14m 22s DSN delay', detail: 'Autonomous CDS active', status: 'CDS active', dot: 'bg-sky-400' },
+                        { label: 'Gravity', value: `Bone density ${activeAstronaut.bio.boneDensityLoss}`, detail: 'ARED and LBNP ready', status: 'Readiness check', dot: 'bg-amber-400' },
+                        { label: 'Environment', value: 'CO₂ 2.8 mmHg', detail: 'Air quality nominal', status: 'Nominal', dot: 'bg-emerald-400' },
+                    ] as const).map(({ label, value, detail, status, dot }) => (
+                        <button
+                            key={label}
+                            type="button"
+                            onClick={() => setSelectedHazard(label)}
+                            className="orbit-glass-inset flex min-w-0 cursor-pointer flex-col gap-1 px-3 py-2 text-left hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                        >
+                            <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-300">
+                                {label}
+                                <span className={`size-1.5 shrink-0 rounded-full ${dot}`} title={status}>
+                                    <span className="sr-only">{status}</span>
+                                </span>
+                            </span>
+                            <span className="text-sm leading-snug font-medium text-slate-50 tabular-nums">{value}</span>
+                            <span className="text-xs leading-snug text-slate-400">{detail}</span>
+                        </button>
+                    ))}
                 </div>
+            </section>
 
-                {/* ------------------------------------------------------------- */}
-                {/* CENTER COLUMN: 3D Holographic Biomechanical Scanner (The Hero)*/}
-                {/* ------------------------------------------------------------- */}
-                <div className="col-span-12 lg:col-span-6 flex flex-col">
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-1 relative overflow-hidden flex flex-col flex-1 min-h-[480px] shadow-lg">
+            {/* Mission control cockpit */}
+            <div className="relative z-10 grid grid-cols-12 gap-3.5 flex-1">
+                <div className="col-span-12 flex min-w-0 flex-col lg:col-span-9">
+                    <div className="orbit-glass p-1.5 relative overflow-hidden flex flex-col flex-1 min-h-[480px] shadow-lg">
                         <Astronaut3DModel
                             heartRate={activeAstronaut.vitals.heartRate.numericValue}
                             coreTemp={activeAstronaut.vitals.coreTemp.numericValue}
+                            oxygenSaturation={showLowVitalsDemo ? 92 : activeAstronaut.vitals.spO2.numericValue}
+                            demoHeartRate={showLowVitalsDemo ? 48 : undefined}
                             evaStatus={activeAstronaut.bio.evaStatus}
                             astronautName={activeAstronaut.bio.name}
+                            telemetryOverlay={
+                                <ScannerBiometrics
+                                    key={activeAstronaut.bio.id}
+                                    vitals={activeAstronaut.vitals}
+                                    history={readings}
+                                    showDemo={showLowVitalsDemo}
+                                    onClick={(metric) => {
+                                        setSelectedBiometric(metric);
+                                        setIsBiometricsModalOpen(true);
+                                    }}
+                                />
+                            }
                         />
+                        {showLowVitalsDemo && (
+                            <button
+                                type="button"
+                                onClick={() => setShowLowVitalsDemo(false)}
+                                className="orbit-glass-inset mx-2 my-1 self-end cursor-pointer px-3 py-1.5 text-xs text-slate-300 hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300"
+                            >
+                                End demo · Show current readings
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* ------------------------------------------------------------- */}
                 {/* RIGHT COLUMN: Suit Life Support & ORBIT 5-Hazards Radar      */}
                 {/* ------------------------------------------------------------- */}
-                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3 font-mono">
+                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3">
                     {/* Suit & Environmental Life Support */}
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg">
+                    <div className="orbit-glass p-3 shadow-lg">
                         <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2.5">
                             <div className="flex items-center gap-1.5">
                                 <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                <h2 className="text-xs font-bold tracking-wider text-white">SUIT LIFE SUPPORT</h2>
+                                <h2 className="orbit-section-title">Suit Life Support</h2>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setIsSuitModalOpen(true)}
-                                className="text-[10px] text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                                className="text-xs text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5"
                             >
                                 <span>Console</span>
                                 <ArrowUpRight className="w-3 h-3" />
@@ -997,20 +838,24 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                         </div>
 
                         <div className="space-y-2.5">
-                            <ProgressBar
-                                label="SUIT PRESSURE"
-                                value={`${activeAstronaut.diagnostics.suitPressurePsi} psi`}
-                                percent={activeAstronaut.diagnostics.suitPressurePercent}
-                                color="bg-[#5cdbdf]"
-                                onClick={() => handleDiagnoseSubsystem('Suit Pressure Valves')}
-                            />
-                            <ProgressBar
-                                label="O2 RESERVES"
-                                value={`${activeAstronaut.diagnostics.o2Percent}%`}
-                                percent={activeAstronaut.diagnostics.o2Percent}
-                                color="bg-amber-400"
-                                onClick={() => handleDiagnoseSubsystem('O2 Reserve Canister')}
-                            />
+                            <div className="orbit-glass relative divide-y divide-white/10 px-3">
+                                <SuitGauge
+                                    label="Suit pressure"
+                                    value={activeAstronaut.diagnostics.suitPressurePsi}
+                                    unit="psi"
+                                    percent={activeAstronaut.diagnostics.suitPressurePercent}
+                                    accent="text-cyan-200"
+                                    onClick={() => handleDiagnoseSubsystem('Suit Pressure Valves')}
+                                />
+                                <SuitGauge
+                                    label="O₂ reserves"
+                                    value={activeAstronaut.diagnostics.o2Percent}
+                                    unit="%"
+                                    percent={activeAstronaut.diagnostics.o2Percent}
+                                    accent="text-amber-200"
+                                    onClick={() => handleDiagnoseSubsystem('O2 Reserve Canister')}
+                                />
+                            </div>
                             <ProgressBar
                                 label="DOSIMETRY"
                                 value={activeAstronaut.diagnostics.radiationStatus}
@@ -1028,84 +873,47 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                         </div>
                     </div>
 
-                    {/* ORBIT 5-HAZARDS BIOMEDICAL RADAR */}
-                    <div className="rounded-xl border border-[#132c4a] bg-[#06121e]/95 p-3 shadow-lg flex-1 flex flex-col justify-between">
-                        <div>
-                            <div className="flex items-center justify-between border-b border-[#132c4a] pb-2 mb-2.5">
-                                <div className="flex items-center gap-1.5">
-                                    <Activity className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                    <h2 className="text-xs font-bold tracking-wider text-white">ORBIT 5-HAZARD STATUS</h2>
-                                </div>
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800">
-                                    R.I.D.G.E.
-                                </span>
-                            </div>
-
-                            <div className="space-y-2 text-[11px]">
-                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
-                                    <div>
-                                        <div className="font-bold text-amber-400 text-[10px]">[R] SPACE RADIATION</div>
-                                        <div className="text-slate-300 text-[11px]">0.18 mSv/h • Safe Threshold</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                        SHIELDED
-                                    </span>
-                                </div>
-
-                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
-                                    <div>
-                                        <div className="font-bold text-purple-400 text-[10px]">[I] ISOLATION & CONFINEMENT</div>
-                                        <div className="text-slate-300 text-[11px]">Sleep: 84% • Circadian Sync</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
-                                        SSLA ON
-                                    </span>
-                                </div>
-
-                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
-                                    <div>
-                                        <div className="font-bold text-sky-400 text-[10px]">[D] DISTANCE FROM EARTH</div>
-                                        <div className="text-slate-300 text-[11px]">DSN Delay: 14m 22s Latency</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">
-                                        CDS ACTIVE
-                                    </span>
-                                </div>
-
-                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
-                                    <div>
-                                        <div className="font-bold text-rose-400 text-[10px]">[G] GRAVITY FIELDS</div>
-                                        <div className="text-slate-300 text-[11px]">Bone: {activeAstronaut.bio.boneDensityLoss} • SANS Check</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
-                                        ARED READY
-                                    </span>
-                                </div>
-
-                                <div className="p-2 rounded bg-[#0a1f2e]/70 border border-[#1a4b6c]/60 flex items-center justify-between">
-                                    <div>
-                                        <div className="font-bold text-emerald-400 text-[10px]">[E] HOSTILE ENVIRONMENT</div>
-                                        <div className="text-slate-300 text-[11px]">ECLSS pCO2: 2.8 mmHg • Nominal</div>
-                                    </div>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                        PURGED
-                                    </span>
-                                </div>
-                            </div>
+                    <section aria-labelledby="orbit-hazard-status-title" className="orbit-glass relative p-3 sm:p-4">
+                        <div className="mb-3 flex items-center gap-2">
+                            <Activity aria-hidden="true" className="size-4 shrink-0 text-cyan-200" />
+                            <h2 id="orbit-hazard-status-title" className="orbit-section-title">ORBIT Hazard Status</h2>
                         </div>
 
-                        {/* Action Buttons */}
-                        <div className="pt-3 border-t border-[#132c4a] mt-3 space-y-2">
-                            <button
-                                type="button"
-                                onClick={() => setIsSelfAssessmentOpen(true)}
-                                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white font-bold text-xs transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] cursor-pointer"
-                            >
-                                <Zap className="w-3.5 h-3.5" />
-                                <span>EVALUATE & ACT ON HEALTH</span>
-                            </button>
-                        </div>
-                    </div>
+                        <ul className="orbit-glass-inset divide-y divide-white/10 px-1">
+                            {([
+                                { hazard: 'Radiation', detail: activeAstronaut.diagnostics.radiationStatus, status: 'Shielded', dot: 'bg-emerald-300' },
+                                { hazard: 'Isolation', detail: 'Sleep efficiency 84%', status: 'Lighting active', dot: 'bg-violet-300' },
+                                { hazard: 'Distance', detail: '14m 22s signal delay', status: 'CDS active', dot: 'bg-sky-300' },
+                                { hazard: 'Gravity', detail: `Bone density ${activeAstronaut.bio.boneDensityLoss}`, status: 'ARED ready', dot: 'bg-amber-300' },
+                                { hazard: 'Environment', detail: 'Cabin CO₂ 2.8 mmHg', status: 'Purged', dot: 'bg-emerald-300' },
+                            ] as const).map(({ hazard, detail, status, dot }) => (
+                                <li key={hazard}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedHazard(hazard)}
+                                        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-xl px-2 py-2.5 text-left hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-cyan-300"
+                                    >
+                                        <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${dot}`} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-medium leading-tight text-white">{hazard}</span>
+                                            <span className="mt-1 block text-xs leading-snug text-slate-300 tabular-nums">{detail}</span>
+                                            <span className="mt-1 block text-xs leading-snug text-slate-400">{status}</span>
+                                        </span>
+                                        <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-slate-400 group-hover:text-cyan-200" />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsSelfAssessmentOpen(true)}
+                            className="orbit-header-control orbit-glass-inset mt-3 w-full justify-between"
+                        >
+                            Self-assessment
+                            <ArrowUpRight aria-hidden="true" className="size-3.5 text-cyan-200" />
+                        </button>
+                    </section>
                 </div>
             </div>
 
@@ -1277,7 +1085,13 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
             {/* Biometrics Detail Modal */}
             <BiometricsDetailModal
                 isOpen={isBiometricsModalOpen}
-                onClose={() => setIsBiometricsModalOpen(false)}
+                metricKey={selectedBiometric}
+                samples={selectedBiometric ? readings.map((sample) => sample[biometricKeys.indexOf(selectedBiometric)]) : undefined}
+                demoValue={showLowVitalsDemo ? selectedBiometric === 'heartRate' ? 48 : selectedBiometric === 'spO2' ? 92 : undefined : undefined}
+                onClose={() => {
+                    setSelectedBiometric(null);
+                    setIsBiometricsModalOpen(false);
+                }}
                 astronaut={activeAstronaut}
                 onRecalibrate={() => {
                     handleAddManualLog('Biosensors Recalibrated', '[DIAGNOSTIC] Galvanic skin sensors recalibrated');
@@ -1298,8 +1112,12 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
 
             {/* NASA 5 Hazards Autonomous Self-Assessment & Action Modal */}
             <AstronautSelfAssessmentModal
-                isOpen={isSelfAssessmentOpen}
-                onClose={() => setIsSelfAssessmentOpen(false)}
+                isOpen={isSelfAssessmentOpen || selectedHazard !== null}
+                hazard={selectedHazard}
+                onClose={() => {
+                    setIsSelfAssessmentOpen(false);
+                    setSelectedHazard(null);
+                }}
                 astronaut={activeAstronaut}
                 onActionExecuted={(actionTitle, details) => {
                     handleAddManualLog(actionTitle, `[AUTONOMOUS COUNTERMEASURE] ${details}`);
@@ -1331,83 +1149,205 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
 }
 
 // Sub-components for repeatable UI elements
-function VitalCard({ title, value, status, color, valueColor, type, isPrimary, baseline, onClick }: any) {
-    const textColor = valueColor || color;
+function ScannerBiometrics({ vitals, onClick, showDemo, history }: {
+    vitals: AstronautFullData['vitals'];
+    onClick: (metric: BiometricKey) => void;
+    showDemo: boolean;
+    history: number[][];
+}) {
+    const heartRate = vitals.heartRate.numericValue;
+    const respiration = vitals.respiration.numericValue;
+
+    const readings = [
+        { label: 'Heart rate', metric: 'heartRate', icon: Heart, position: '@min-[42rem]:col-start-1 @min-[42rem]:row-start-1', trace: 'ecg', anchor: 'heart' },
+        { label: 'Oxygen saturation', metric: 'spO2', icon: Activity, position: '@min-[42rem]:col-start-1 @min-[42rem]:row-start-2', trace: 'pulse', anchor: 'hand' },
+        { label: 'Respiration', metric: 'respiration', icon: Wind, position: '@min-[42rem]:col-start-1 @min-[42rem]:row-start-3', trace: 'breath', anchor: 'ribs' },
+        { label: 'Core temperature', metric: 'coreTemp', icon: Flame, position: '@min-[42rem]:col-start-2 @min-[42rem]:row-start-1 @min-[42rem]:translate-y-10', anchor: 'core' },
+        { label: 'Hydration', metric: 'hydration', icon: Droplet, position: '@min-[42rem]:col-start-2 @min-[42rem]:row-start-2 @min-[42rem]:translate-y-10' },
+    ] as const;
+
     return (
-        <div
-            onClick={onClick}
-            className={`rounded-lg p-2.5 border transition-all cursor-pointer group shadow-sm flex flex-col justify-between ${
-                isPrimary
-                    ? 'border-[#1a4b6c] bg-[#0a1f2e] hover:border-[#5cdbdf]'
-                    : 'border-[#132c4a] bg-[#081325] hover:border-[#1a4b6c]'
-            }`}
-        >
-            <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-bold group-hover:text-white transition-colors tracking-wide text-[11px]">{title}</span>
-                <span style={{ color: textColor }} className="font-bold text-xs tracking-wider">
-                    {value} {status && <span className="text-[10px] font-normal">{status}</span>}
-                </span>
-            </div>
+        <div role="group" aria-label="Biometrics telemetry" className="grid grid-cols-2 gap-2 sm:grid-cols-3 @min-[42rem]:grid-cols-[minmax(0,10rem)_minmax(0,10rem)] @min-[42rem]:justify-between @min-[42rem]:gap-y-3 @min-[56rem]:grid-cols-[minmax(0,12.5rem)_minmax(0,12.5rem)]">
+            {readings.map(({ label, metric: metricKey, icon: Icon, position, ...reading }, index) => {
+                const metric = vitals[metricKey];
+                const isHeartRate = metricKey === 'heartRate';
+                const isOxygen = metric === vitals.spO2;
+                const isDemoReading = (isHeartRate || isOxygen) && showDemo;
+                const readingValue = isDemoReading ? (isHeartRate ? 48 : 92) : metric.numericValue;
+                const heartWarning = isHeartRate && Number.isFinite(readingValue) && (readingValue < 60 || readingValue > 100);
+                const oxygenWarning = isOxygen && Number.isFinite(readingValue) && readingValue < 95;
+                const accent = isHeartRate ? '#5cdbdf' : metric.valueColor || metric.color;
+                const status = heartWarning
+                    ? (readingValue < 60 ? 'Low BPM' : 'High BPM')
+                    : oxygenWarning ? 'Low oxygen' : metric.status?.replace(/[()]/g, '') ||
+                        (metric === vitals.hydration ? metric.value.match(/^([^,]+),/)?.[1] : undefined);
 
-            <div className={`relative w-full rounded overflow-hidden my-1.5 transition-colors border ${
-                isPrimary ? 'h-10 bg-[#040d18] border-[#132c4a]' : 'h-8 bg-[#040d18] border-[#132c4a]'
-            }`}>
-                <div
-                    className="absolute inset-0 opacity-20"
-                    style={{
-                        backgroundImage: 'linear-gradient(to right, #5cdbdf 1px, transparent 1px), linear-gradient(to bottom, #5cdbdf 1px, transparent 1px)',
-                        backgroundSize: '12px 12px',
-                    }}
-                />
-                <GraphPath type={type} color={color} />
-            </div>
-
-            {baseline && (
-                <div className="text-[9px] text-slate-500 font-mono tracking-wider flex justify-between">
-                    <span>{baseline}</span>
-                    <span className="text-[#5cdbdf] opacity-0 group-hover:opacity-100 transition-opacity">DETAIL ↗</span>
-                </div>
-            )}
+                return (
+                    <button
+                        key={label}
+                        type="button"
+                        data-scanner-anchor={'anchor' in reading ? reading.anchor : undefined}
+                        onClick={() => onClick(metricKey)}
+                        className={`pointer-events-auto group relative min-w-0 cursor-pointer orbit-glass orbit-glass-readout px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 lg:px-3.5 ${position} ${heartWarning || oxygenWarning ? 'orbit-glass-vital-warning' : ''}`}
+                    >
+                        <span className="flex items-center gap-1.5 orbit-metric-label">
+                            <Icon aria-hidden="true" className="size-3.5 shrink-0" style={{ color: accent }} />
+                            {label}
+                        </span>
+                        <span className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
+                            <span className={`orbit-metric-value ${metric === vitals.heartRate ? 'text-3xl lg:text-4xl' : 'text-2xl lg:text-3xl'}`} style={{ color: accent === '#ef4444' ? '#fca5a5' : '#f8fafc' }}>
+                                {readingValue}
+                            </span>
+                            <span className="text-xs text-slate-300">{metric.unit}</span>
+                        </span>
+                        {status && <span className="mt-0.5 block text-xs" style={{ color: accent === '#ef4444' ? '#fca5a5' : accent }}>{status}</span>}
+                        {isDemoReading && <span className="mt-0.5 block text-xs text-slate-300">Demo</span>}
+                        {'trace' in reading ? (
+                            <ScannerWaveform
+                                trace={reading.trace}
+                                rate={reading.trace === 'breath' ? respiration : showDemo ? 48 : heartRate}
+                                accent={accent}
+                            />
+                        ) : (
+                            <ScannerTrend samples={history.map((sample) => sample[index])} accent={accent} />
+                        )}
+                        <span className="sr-only">Open biometrics details</span>
+                    </button>
+                );
+            })}
         </div>
     );
 }
 
-function GraphPath({ type, color }: { type: string; color: string }) {
-    let d = '';
-    if (type === 'ecg') {
-        d = 'M0,20 L12,20 L16,6 L22,34 L26,20 L40,20 L44,12 L48,28 L52,20 L68,20 L72,6 L78,34 L82,20 L100,20';
-    } else if (type === 'sine') {
-        d = 'M0,20 Q12.5,6 25,20 T50,20 T75,20 T100,20';
-    } else if (type === 'slow-sine') {
-        d = 'M0,20 Q25,4 50,20 T100,20';
-    } else {
-        d = 'M0,20 L100,20'; // flatline
-    }
+const scannerWaveforms = {
+    ecg: [[0, 13], [0.14, 13], [0.22, 11], [0.31, 13], [0.39, 15], [0.46, 3], [0.53, 21], [0.61, 13], [0.73, 10], [0.84, 13], [1, 13]],
+    pulse: [[0, 19], [0.13, 17], [0.29, 5], [0.42, 8], [0.56, 15], [0.65, 12], [0.82, 17], [1, 19]],
+    breath: [[0, 17], [0.14, 15], [0.32, 7], [0.47, 5], [0.62, 8], [0.82, 15], [1, 17]],
+};
+
+function ScannerWaveform({ trace, rate, accent }: {
+    trace: keyof typeof scannerWaveforms;
+    rate: number;
+    accent: string;
+}) {
+    const seconds = trace === 'breath' ? 12 : 3;
+    const cycles = Number.isFinite(rate) ? Math.min(30, seconds * Math.max(0, rate) / 60) : 0;
+    const width = 100 / cycles;
+    const points = cycles > 0
+        ? Array.from({ length: Math.ceil(cycles) }, (_, cycle) =>
+            scannerWaveforms[trace].map(([phase, y]) => `${(cycle + phase) * width},${y}`)
+        ).flat().join(' ')
+        : '0,13 100,13';
 
     return (
-        <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 40">
-            <path
-                d={d}
-                fill="none"
-                stroke={color}
-                strokeWidth="1.5"
-                vectorEffect="non-scaling-stroke"
-                className="drop-shadow-sm"
-            />
-        </svg>
+        <span className="mt-1.5 block overflow-hidden rounded-md bg-[#030b14]/65 px-1">
+            <svg
+                role="img"
+                aria-label={`Illustrative ${trace} waveform based on the displayed ${trace === 'breath' ? 'respiration' : 'heart'} rate`}
+                className="block h-7 w-full"
+                viewBox="0 0 100 24"
+                preserveAspectRatio="none"
+            >
+                <path d="M0 13H100" stroke="#34556b" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+                <polyline points={points} fill="none" stroke={accent} strokeWidth="1.75" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            </svg>
+        </span>
+    );
+}
+
+function ScannerTrend({ samples, accent }: { samples: number[]; accent: string }) {
+    const values = samples.filter(Number.isFinite);
+    const minimum = Math.min(...values);
+    const range = Math.max(...values) - minimum;
+    const points = values.map((value, index) => ({
+        x: values.length === 1 ? 96 : 4 + 92 * index / (values.length - 1),
+        y: range > 0 ? 19 - 14 * (value - minimum) / range : 12,
+    }));
+    const latest = points[points.length - 1];
+
+    return (
+        <span className="mt-1.5 block rounded-md bg-[#030b14]/65 px-1">
+            <svg
+                role="img"
+                aria-label={points.length > 1 ? 'Recent readings since selecting this crew member' : latest ? 'Current reading. Waiting for a trend.' : 'Waiting for readings'}
+                className="block h-7 w-full"
+                viewBox="0 0 100 24"
+                preserveAspectRatio="none"
+            >
+                <path d="M4 12H96" stroke="#34556b" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+                {points.length > 1 && (
+                    <polyline
+                        points={points.map(({ x, y }) => `${x},${y}`).join(' ')}
+                        fill="none"
+                        stroke={accent}
+                        strokeWidth="2"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )}
+                {points.length === 1 && (
+                    <path d="M4 12H96" stroke={accent} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                )}
+                {latest && <circle cx={latest.x} cy={latest.y} r="2" fill={accent} />}
+            </svg>
+        </span>
+    );
+}
+
+function SuitGauge({ label, value, unit, percent, accent, onClick }: {
+    label: string;
+    value: number;
+    unit: string;
+    percent: number;
+    accent: string;
+    onClick: () => void;
+}) {
+    const fill = Math.min(100, Math.max(0, Number.isFinite(percent) ? percent : 0));
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className="group flex w-full cursor-pointer items-center justify-between gap-2 rounded-md py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+        >
+            <span className="min-w-0">
+                <span className="block orbit-metric-label">{label}</span>
+                <span className="flex items-baseline gap-1">
+                    <span className={`orbit-metric-value text-3xl ${accent}`}>{value}</span>
+                    <span className="text-xs text-slate-300">{unit}</span>
+                </span>
+            </span>
+            <span aria-hidden="true" className="flex shrink-0 items-center gap-1.5">
+                <svg viewBox="0 0 44 28" className={`h-7 w-11 ${accent}`} fill="none">
+                    <path d="M4 24a18 18 0 1 1 36 0" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" strokeLinecap="round" />
+                    {fill > 0 && (
+                        <path
+                            d="M4 24a18 18 0 1 1 36 0"
+                            pathLength={100}
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeDasharray={`${fill} 100`}
+                        />
+                    )}
+                </svg>
+                <ArrowUpRight className="size-3 text-slate-400 group-hover:text-white" />
+            </span>
+            <span className="sr-only">Run subsystem diagnostics</span>
+        </button>
     );
 }
 
 function ProgressBar({ label, value, percent, color, onClick }: any) {
     return (
-        <div onClick={onClick} className="text-xs cursor-pointer group space-y-1">
-            <div className="flex justify-between items-center text-[10px]">
+        <button type="button" onClick={onClick} className="block w-full text-left text-xs cursor-pointer group space-y-1">
+            <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-400 group-hover:text-white transition-colors">{label}</span>
                 <span className="text-white font-mono font-bold">{value}</span>
             </div>
             <div className="h-2 w-full rounded bg-[#030b14] border border-[#132c4a] group-hover:border-[#5cdbdf] relative overflow-hidden flex transition-colors">
                 <div className={`${color} h-full transition-all duration-500 rounded-sm`} style={{ width: `${percent}%` }} />
             </div>
-        </div>
+        </button>
     );
 }
