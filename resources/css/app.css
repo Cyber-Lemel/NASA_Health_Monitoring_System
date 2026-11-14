@@ -326,12 +326,10 @@
         z-index: 1;
         padding: .65px;
         border-radius: inherit;
-        background: linear-gradient(
-            var(--glass-light-angle, 50deg),
-            rgb(221 235 255 / 6%) 20%,
-            rgb(221 235 255 / 11%) 60%,
-            rgb(255 231 202 / 36%)
-        );
+        background: linear-gradient(var(--glass-light-angle, 50deg),
+                rgb(221 235 255 / 6%) 20%,
+                rgb(221 235 255 / 11%) 60%,
+                rgb(255 231 202 / 36%));
         mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
         mask-composite: exclude;
         pointer-events: none;
@@ -375,11 +373,9 @@
 }
 
 .orbit-glass-alert::before {
-    background: linear-gradient(
-        var(--glass-light-angle, 50deg),
-        rgb(248 113 113 / 14%),
-        rgb(252 165 165 / 42%)
-    );
+    background: linear-gradient(var(--glass-light-angle, 50deg),
+            rgb(248 113 113 / 14%),
+            rgb(252 165 165 / 42%));
 }
 
 .orbit-glass-vital-warning {
@@ -392,12 +388,10 @@
 
 .orbit-glass-vital-warning::before {
     padding: 1.5px;
-    background: linear-gradient(
-        var(--glass-light-angle, 50deg),
-        #ff4d5c,
-        #ff8189 65%,
-        #ffc2c5
-    );
+    background: linear-gradient(var(--glass-light-angle, 50deg),
+            #ff4d5c,
+            #ff8189 65%,
+            #ffc2c5);
 }
 
 .orbit-scanner-glass {
