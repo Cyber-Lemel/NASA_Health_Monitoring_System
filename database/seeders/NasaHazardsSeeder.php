@@ -100,7 +100,7 @@ class NasaHazardsSeeder extends Seeder
                     ['metric' => 'Medical Formulary Potency Retention', 'nominal' => '≥ 90%', 'critical' => '< 75%', 'unit' => '% potency'],
                 ],
                 'countermeasures' => [
-                    ['name' => 'Autonomous Medical Decision Support (AHMS AI)', 'status' => 'Active Architecture', 'desc' => 'Clinical algorithmic guidance providing immediate differential diagnosis, surgical protocols, and pharmacology recommendations.'],
+                    ['name' => 'Autonomous Medical Decision Support (ORBIT AI)', 'status' => 'Active Architecture', 'desc' => 'Clinical algorithmic guidance providing immediate differential diagnosis, surgical protocols, and pharmacology recommendations.'],
                     ['name' => 'Exploration Medical Capability (ExMC) System', 'status' => 'In Development', 'desc' => 'Compact modular ultrasound, blood electrolyte analyzers, automated intravenous fluid generators, and sterilization kits.'],
                     ['name' => 'Just-in-Time VR Procedural Clinical Training', 'status' => 'Deployed for Deep Space', 'desc' => 'Interactive virtual reality clinical refreshers allowing astronauts to review emergency procedures immediately before intervention.'],
                     ['name' => 'Radiation-Shielded Pharmaceutical Containment', 'status' => 'Under Qualification', 'desc' => 'Hermetically sealed, temperature-regulated, heavy-shielded formulary pods prolonging drug chemical stability.'],

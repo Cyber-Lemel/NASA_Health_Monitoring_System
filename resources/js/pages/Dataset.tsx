@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import NasaLogo from '@/components/nasa-logo';
 import TelemetryImportModal from '@/components/telemetry-import-modal';
+import AstronautHealthRiskModal from '@/components/astronaut-health-risk-modal';
 import type { ParsedImportPayload } from '@/types/astronaut';
 import { toast } from 'sonner';
 
@@ -305,6 +306,8 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
     const [deletingRecord, setDeletingRecord] = useState<DatasetRecordItem | null>(null);
     const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isHealthRiskOpen, setIsHealthRiskOpen] = useState(false);
+    const [healthRiskAstronaut, setHealthRiskAstronaut] = useState<any>(null);
 
     // Form state for Manual Add
     const [manualForm, setManualForm] = useState({
@@ -1063,6 +1066,19 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                                     <ArrowLeft className="w-3.5 h-3.5" />
                                     <span>MISSION HUD</span>
                                 </Link>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setHealthRiskAstronaut(null);
+                                        setIsHealthRiskOpen(true);
+                                    }}
+                                    className="border border-amber-500/80 bg-amber-950/40 text-amber-300 hover:bg-amber-600 hover:text-white px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                                    title="Open ORBIT Astronaut Health Risk & Microgravity Pathophysiology Engine"
+                                >
+                                    <Activity className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>RISK ANALYZER</span>
+                                </button>
 
                                 <button
                                     onClick={exportAllCsv}
@@ -2414,13 +2430,28 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between gap-3 text-xs pt-4 border-t border-[#1a4b6c] shrink-0">
-                                <button
-                                    onClick={() => setSelectedAstronaut(null)}
-                                    className="px-4 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] transition-all cursor-pointer tracking-wider"
-                                >
-                                    CLOSE DOSSIER
-                                </button>
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-4 border-t border-[#1a4b6c] shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setSelectedAstronaut(null)}
+                                        className="px-4 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] transition-all cursor-pointer tracking-wider"
+                                    >
+                                        CLOSE DOSSIER
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setHealthRiskAstronaut(selectedAstronaut);
+                                            setIsHealthRiskOpen(true);
+                                        }}
+                                        className="px-4 py-2 border border-amber-600/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                                    >
+                                        <Activity className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>EVALUATE HEALTH RISKS</span>
+                                    </button>
+                                </div>
+
                                 <Link
                                     href="/"
                                     className="inline-flex items-center gap-2 px-5 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-slate-950 font-bold hover:bg-cyan-300 transition-all shadow-[0_0_15px_rgba(92,219,223,0.3)] tracking-wider"
@@ -2432,6 +2463,43 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                         </div>
                     </div>
                 )}
+
+                {/* ORBIT Health Risk & Microgravity Pathophysiology Engine Modal */}
+                <AstronautHealthRiskModal
+                    isOpen={isHealthRiskOpen}
+                    onClose={() => setIsHealthRiskOpen(false)}
+                    astronaut={healthRiskAstronaut ? {
+                        bio: {
+                            id: String(healthRiskAstronaut.Astronaut ?? healthRiskAstronaut.id ?? 'AST-01'),
+                            name: healthRiskAstronaut.Name || 'Mission Specialist',
+                            role: healthRiskAstronaut.Role || 'Astronaut Specialist',
+                            mission: 'ARTEMIS II',
+                            evaStatus: 'ON-GOING',
+                            age: Number(healthRiskAstronaut.Age_at_mission_start ?? 40),
+                            gender: healthRiskAstronaut.Gender || 'Male',
+                            country: healthRiskAstronaut.Country || 'USA / NASA',
+                            missionDurationDays: Number(healthRiskAstronaut['Mission_duration(Days)'] ?? 180),
+                            boneDensityLoss: String(healthRiskAstronaut.Bone_Density_Loss || '-3.0%'),
+                        },
+                        vitals: {
+                            heartRate: { title: 'HEART RATE', value: '115 bpm', numericValue: 115, unit: 'bpm', color: '#5cdbdf', type: 'ecg', baseline: '60-100' },
+                            spO2: { title: 'SpO2', value: '97%', numericValue: 97, unit: '%', color: '#5cdbdf', type: 'sine', baseline: '95-100%' },
+                            coreTemp: { title: 'CORE TEMP', value: '37.1°C', numericValue: 37.1, unit: '°C', color: '#5cdbdf', type: 'ecg', baseline: '36.5-37.5°C' },
+                            respiration: { title: 'RESPIRATION', value: '18 bpm', numericValue: 18, unit: 'bpm', color: '#5cdbdf', type: 'slow-sine', baseline: '12-20' },
+                            hydration: { title: 'HYDRATION', value: 'Optimal, 74%', numericValue: 74, unit: '%', color: '#5cdbdf', type: 'flat', baseline: '80-100%' },
+                        },
+                        diagnostics: {
+                            suitPressurePsi: 4.3,
+                            suitPressurePercent: 60,
+                            o2Percent: 21,
+                            radiationStatus: `${healthRiskAstronaut.Radiation_Exposure || 95} mSv`,
+                            radiationPercent: 85,
+                            batteryPercent: 74,
+                        },
+                        alerts: [],
+                        logs: [],
+                    } as any : null}
+                />
             </div>
         </>
     );

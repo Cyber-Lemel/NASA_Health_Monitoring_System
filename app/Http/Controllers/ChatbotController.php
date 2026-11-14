@@ -12,7 +12,7 @@ class ChatbotController extends Controller
     /**
      * User-Agent header required by scientific APIs (Wikipedia, NASA, open scientific archives).
      */
-    private const USER_AGENT = 'NASA-AHMS-Bot/1.0 (https://nasa.gov; flight-surgeon@nasa.gov; NASA Astronaut Health Monitoring System)';
+    private const USER_AGENT = 'ORBIT-Flight-Biomedical-Bot/1.0 (https://nasa.gov; flight-surgeon@nasa.gov; ORBIT NASA Astronaut Health Monitoring System)';
 
     /**
      * Handle AI chat queries with real-time internet and NASA knowledge fetching.
@@ -228,12 +228,13 @@ class ChatbotController extends Controller
      */
     private function callGeminiApi(string $message, array $history, array $internetData, string $localContext, string $apiKey): ?string
     {
-        $systemPrompt = "You are CAPCOM AI, the official AI Biomedical & Mission Operations Co-Pilot for the NASA Astronaut Health Monitoring System (AHMS) developed at the Lyndon B. Johnson Space Center (JSC Houston, TX).
+        $systemPrompt = "You are CAPCOM AI, the official AI Biomedical & Mission Operations Co-Pilot for the ORBIT NASA Astronaut Health Monitoring System developed for long-duration exploration missions.
 You provide authoritative, concise, mission-critical spaceflight medical and astronaut health intelligence directly aligned with official NASA Human Research Program (HRP) publications.
 Format answers cleanly with clear markdown headers (### and ####), bold highlights (**term**), and bullet points. Never output raw markdown fences.
 Official NASA References:
 - NASA Human Research Program (HRP): The 5 Hazards of Human Spaceflight (RIDGE: Radiation, Isolation/Confinement, Distance from Earth, Gravity Fields, Hostile/Closed Environments).
 - NASA Spaceflight Human-System Standard (NASA-STD-3001).
+- ORBIT Autonomous Health Risk Analyzer: Microgravity cardiovascular pathophysiology, cephalad fluid shift, Spaceflight-Associated Neuro-ocular Syndrome (SANS), internal jugular vein thrombosis, and radiation dosimetry.
 Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "\n" .
 "System Active Crew Data: " . $localContext;
 
@@ -267,6 +268,53 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
         $q = strtolower($message);
         $liveFactsText = !empty($internetData['facts']) ? "\n\n**🌐 Live DSN Internet Uplink Data:**\n- " . implode("\n- ", $internetData['facts']) : '';
         $sources = $internetData['sources'];
+
+        // =========================================================================
+        // CATEGORY 0: Astronaut Blood Pressure, Hypertension & Cardiovascular Risks
+        // Aligned with NASA-STD-3001 & NASA HRP Cardiovascular & SANS Research
+        // =========================================================================
+        if (preg_match('/(blood pressure|hypertension|hypotension|high bp|systolic|diastolic|mmhg|hypertensive|cardiovascular.*event|stroke.*risk|cardiac.*risk|what.*risk.*blood pressure)/i', $q)) {
+            $officialSources = [
+                [
+                    'title' => 'NASA HRP: Cardiovascular Deconditioning & Neuro-ocular Risks in Space',
+                    'url' => 'https://www.nasa.gov/hrp/research-facilities/cardiovascular-and-sans/',
+                    'source' => 'NASA Human Research Program',
+                ],
+                [
+                    'title' => 'NASA-STD-3001: Astronaut Cardiovascular Medical Protocols',
+                    'url' => 'https://www.nasa.gov/hrp/standards',
+                    'source' => 'NASA Office of the Chief Health and Medical Officer',
+                ],
+                [
+                    'title' => 'ORBIT Autonomous Health Risk Analyzer API',
+                    'url' => '/api/astronaut/health-risk/knowledge',
+                    'source' => 'ORBIT Deep Space Telemetry Hub',
+                ],
+            ];
+
+            $reply = "### 🫀 ORBIT Biomedical Alert: Astronaut Blood Pressure & Spaceflight Health Risks\n\n"
+                . "In microgravity (0g), blood pressure behaves dramatically differently than on Earth. Without hydrostatic downward pressure, approximately **2,000 mL of vascular fluid shifts cephalad** (into the thoracic cavity and head). When an astronaut develops high blood pressure (Systolic ≥ 130–140 mmHg, or Crisis ≥ 160/100 mmHg), the physiological risks multiply exponentially:\n\n"
+                . "#### ⚠️ Primary Spaceflight Health Risks from High Blood Pressure:\n\n"
+                . "1. **Acute SANS (Spaceflight-Associated Neuro-ocular Syndrome) Amplification**:\n"
+                . "   - Cephalad fluid shift combined with high arterial blood pressure severely impairs cerebral venous outflow.\n"
+                . "   - **Pathology**: Causes marked intracranial venous hypertension, bilateral **optic disc edema (papilledema)**, posterior globe flattening, and choroidal micro-folds.\n"
+                . "   - **Consequence**: Permanent loss of visual acuity, which directly jeopardizes navigation, EVA spacewalks, and docking operations.\n\n"
+                . "2. **Internal Jugular Vein (IJV) Thrombosis & Cerebrovascular Stroke**:\n"
+                . "   - Studies on the ISS demonstrated that altered hemodynamics and elevated central venous pressures can cause stagnant or retrograde flow in the internal jugular vein.\n"
+                . "   - **Consequence**: Thrombus (blood clot) formation leading to pulmonary embolism or ischemic/hemorrhagic stroke. On a Mars mission with a 22-minute communication delay, an acute stroke is life-threatening.\n\n"
+                . "3. **Left Ventricular Wall Remodeling & Cardiac Arrhythmia**:\n"
+                . "   - Microgravity causes myocardial muscle mass reduction due to lack of gravity load. Severe hypertension overloads the deconditioned myocardium, triggering supraventricular tachycardias or atrial fibrillation.\n\n"
+                . "4. **Catastrophic Re-Entry Orthostatic Collapse**:\n"
+                . "   - When transitioning from 0g back to Martian gravity (0.38g) or Earth (1g), astronauts who sustained hypertension and autonomic baroreceptor dysregulation experience profound downward blood pooling, precipitating immediate syncope (blackout).\n\n"
+                . "#### 🛡️ Autonomous NASA Countermeasures (Protocol NASA-STD-3001):\n"
+                . "- **Lower Body Negative Pressure (LBNP)**: Deploy the LBNP decompression chamber (-35 to -45 mmHg for 60–90 min) to draw thoracic blood back into the lower extremities.\n"
+                . "- **Autonomous Formulary**: Administer oral antihypertensives (Lisinopril 10 mg PO or Losartan 50 mg PO) from the spacecraft medical kit.\n"
+                . "- **Ultrasound Telemetry**: Perform immediate ultrasound evaluation of Optic Nerve Sheath Diameter (ONSD) and bilateral internal jugular vein Doppler flow.\n"
+                . "- **Live Risk Evaluation**: Use ORBIT's live **Health Risk Analyzer** in the HUD or query `POST /api/astronaut/health-risk/analyze` with real-time parameters."
+                . $liveFactsText;
+
+            return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
+        }
 
         // =========================================================================
         // CATEGORY 1: The 5 Hazards of Human Spaceflight (RIDGE)
@@ -304,7 +352,7 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
                 . "#### 3. Distance from Earth (D)\n"
                 . "- **The Hazard**: While the Moon is ~240,000 miles away (3 days return), Mars is ~140 million miles away. Communication experiences a **speed-of-light delay of up to 22 minutes each way** (44-minute round-trip).\n"
                 . "- **Physiological Impact**: Earth Mission Control flight surgeons cannot provide real-time telemedicine during a critical medical event. Resupply flights and rapid medical evacuation are impossible.\n"
-                . "- **NASA Countermeasures**: Autonomous clinical capabilities, AI diagnostic decision-support (AHMS), extended-shelf-life surgical packs, and comprehensive pre-flight autonomous medical training.\n\n"
+                . "- **NASA Countermeasures**: Autonomous clinical capabilities, AI diagnostic decision-support (ORBIT), extended-shelf-life surgical packs, and comprehensive pre-flight autonomous medical training.\n\n"
                 . "#### 4. Gravity Fields (G)\n"
                 . "- **The Hazard**: Astronauts navigate three gravity transitions: weightlessness (**0g**) during transit, Martian gravity (**0.38g**) or Lunar gravity (**0.16g**), and Earth’s gravity (**1g**) upon return.\n"
                 . "- **Physiological Impact**: Rapid **bone mineral density loss** (1.0% to 1.5% monthly), skeletal muscle atrophy (especially postural calf/spine muscles), cardiovascular deconditioning, cephalad fluid shift causing **SANS** (Spaceflight-Associated Neuro-ocular Syndrome), and orthostatic collapse upon re-entry.\n"
@@ -436,7 +484,7 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
                 . "#### Key Mission Architecture:\n"
                 . "- **Space Launch System (SLS) & Orion**: Providing heavy-lift crew transport with advanced radiation storm shielding.\n"
                 . "- **Lunar Gateway**: An orbital outpost in Near-Rectilinear Halo Orbit (NRHO) serving as a biomedical relay and science station.\n"
-                . "- **Autonomous Health Support**: Because round-trip light time communications to Mars span **6 to 44 minutes**, the AHMS system implements autonomous biomedical diagnostics and AI predictive intervention without reliance on Earth mission control."
+                . "- **Autonomous Health Support**: Because round-trip light time communications to Mars span **6 to 44 minutes**, the ORBIT system implements autonomous biomedical diagnostics and AI predictive intervention without reliance on Earth mission control."
                 . $liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
@@ -446,7 +494,7 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
         // CATEGORY 7: Live Astronaut / Telemetry Vitals Query
         // =========================================================================
         if (preg_match('/(vance|elena|rovani|alex|telemetry|bpm|heart|spo2|vital|subject|crew|status)/i', $q)) {
-            $reply = "### 🧑‍🚀 NASA AHMS Live Telemetry Diagnostic Status\n\n"
+            $reply = "### 🧑‍🚀 ORBIT Mission Control Live Telemetry Diagnostic Status\n\n"
                 . "Current mission control biomedical telemetry feed synchronized over the Deep Space Network (DSN Goldstone channel):\n\n"
                 . "#### Active Telemetry Channel (AST-00 // CDR. Elena Rovani):\n"
                 . "- **Heart Rate (ECG)**: **76 BPM** *(Nominal Sinus Rhythm, R-peak synchronized)*.\n"
@@ -478,8 +526,8 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
         }
 
         // General NASA & Space Intelligence Default
-        $reply = "### 🛰️ NASA CAPCOM Flight Assistant • Telemetry Report\n\n"
-            . "Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **NASA Human Research Program (HRP) 5 Hazards Database (https://www.nasa.gov/hrp/hazards/)**, and NASA live web data streams.\n\n"
+        $reply = "### 🛰️ ORBIT CAPCOM Flight Assistant • Telemetry Report\n\n"
+            . "Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **NASA Human Research Program (HRP) 5 Hazards Database (https://www.nasa.gov/hrp/hazards/)**, and ORBIT biomedical telemetry streams.\n\n"
             . "#### Ready to assist with:\n"
             . "- **The 5 Hazards of Human Spaceflight (RIDGE)**: Radiation, Isolation, Distance, Gravity, and Hostile Environments.\n"
             . "- **Astronaut Biomedical Telemetry**: Real-time heart rate, SpO2, core temp, and ECG analysis.\n"

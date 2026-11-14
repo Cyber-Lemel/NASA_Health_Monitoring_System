@@ -17,6 +17,7 @@ import BiometricsDetailModal from '@/components/biometrics-detail-modal';
 import SystemSettingsModal from '@/components/system-settings-modal';
 import CrewSwitcherModal from '@/components/crew-switcher-modal';
 import AstronautSelfAssessmentModal from '@/components/astronaut-self-assessment-modal';
+import AstronautHealthRiskModal from '@/components/astronaut-health-risk-modal';
 import type {
     AstronautFullData,
     ParsedImportPayload,
@@ -274,6 +275,7 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isCrewSwitcherOpen, setIsCrewSwitcherOpen] = useState(false);
     const [isSelfAssessmentOpen, setIsSelfAssessmentOpen] = useState(false);
+    const [isHealthRiskModalOpen, setIsHealthRiskModalOpen] = useState(false);
     const [selfAssessmentResult, setSelfAssessmentResult] = useState<{
         score: number;
         status: 'NOMINAL' | 'GUARDED' | 'ELEVATED' | 'CRITICAL';
@@ -711,6 +713,16 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
 
                         <button
                             type="button"
+                            onClick={() => setIsHealthRiskModalOpen(true)}
+                            className="px-2.5 py-1 rounded text-amber-300 hover:text-white bg-amber-950/70 border border-amber-700 hover:border-amber-400 transition-colors text-[11px] flex items-center gap-1 font-bold shadow-[0_0_8px_rgba(245,158,11,0.2)] cursor-pointer"
+                            title="Open ORBIT Astronaut Health Risk & Microgravity Pathophysiology Engine (Blood Pressure & Vitals)"
+                        >
+                            <Activity className="w-3 h-3 text-amber-400" />
+                            <span className="hidden xl:inline">Risk Analyzer</span>
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => setIsSettingsModalOpen(true)}
                             className="p-1 rounded text-slate-300 hover:text-white hover:bg-[#132c4a] transition-colors"
                             title="System Settings"
@@ -1098,6 +1110,15 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                         <div className="pt-3 border-t border-[#132c4a] mt-3 space-y-2">
                             <button
                                 type="button"
+                                onClick={() => setIsHealthRiskModalOpen(true)}
+                                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-amber-500/70 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 font-bold text-xs transition-all shadow-[0_0_10px_rgba(245,158,11,0.25)] cursor-pointer"
+                            >
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                <span>ANALYZE HEALTH RISKS (BP & VITALS)</span>
+                            </button>
+
+                            <button
+                                type="button"
                                 onClick={() => setIsSelfAssessmentOpen(true)}
                                 className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white font-bold text-xs transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] cursor-pointer"
                             >
@@ -1324,6 +1345,16 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                             ],
                         }));
                     }
+                }}
+            />
+
+            {/* ORBIT Astronaut Health Risk & Microgravity Pathophysiology Engine Modal */}
+            <AstronautHealthRiskModal
+                isOpen={isHealthRiskModalOpen}
+                onClose={() => setIsHealthRiskModalOpen(false)}
+                astronaut={activeAstronaut}
+                onExecuteAction={(actionTitle, details) => {
+                    handleAddManualLog(actionTitle, `[AUTONOMOUS COUNTERMEASURE] ${details}`);
                 }}
             />
         </div>

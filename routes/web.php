@@ -3,6 +3,7 @@
 use App\Events\AstronautTelemetryUpdated;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\DatasetController;
+use App\Http\Controllers\HealthRiskController;
 use App\Models\DatasetRecord;
 use App\Models\NasaHazard;
 use Illuminate\Http\Request;
@@ -29,6 +30,11 @@ Route::post('/api/dataset/records', [DatasetController::class, 'store'])->name('
 Route::put('/api/dataset/records/{astronaut}', [DatasetController::class, 'update'])->name('dataset.update');
 Route::delete('/api/dataset/records/{astronaut}', [DatasetController::class, 'destroy'])->name('dataset.destroy');
 Route::post('/api/dataset/records/bulk-delete', [DatasetController::class, 'bulkDestroy'])->name('dataset.bulkDestroy');
+
+// ORBIT Astronaut Health Risk & Microgravity Pathophysiology Engine API
+Route::post('/api/astronaut/health-risk/analyze', [HealthRiskController::class, 'analyze'])->name('health-risk.analyze');
+Route::get('/api/astronaut/health-risk/knowledge', [HealthRiskController::class, 'knowledge'])->name('health-risk.knowledge');
+Route::get('/api/astronaut/health-risk', [HealthRiskController::class, 'analyze'])->name('health-risk.get');
 
 // Real-time Telemetry & WebSockets
 Route::post('/api/telemetry/ping', function (Request $request) {
