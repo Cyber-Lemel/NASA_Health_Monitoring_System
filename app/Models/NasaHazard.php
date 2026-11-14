@@ -17,4 +17,3 @@ class NasaHazard extends Model
         'hrp_elements' => 'array',
     ];
 }
-

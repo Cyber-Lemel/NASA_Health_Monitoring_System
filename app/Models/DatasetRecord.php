@@ -9,12 +9,12 @@ class DatasetRecord extends Model
     // Point directly to the exact table name in MySQL
     protected $table = 'dataset_records';
 
-    // The primary key in MySQL is 'Astronaut' (int)
+    // The primary identifier in MySQL/SQLite is 'Astronaut' (string, e.g. AST-01)
     protected $primaryKey = 'Astronaut';
 
     public $incrementing = false;
 
-    protected $keyType = 'int';
+    protected $keyType = 'string';
 
     // Disable automatic created_at / updated_at
     public $timestamps = false;
@@ -22,15 +22,21 @@ class DatasetRecord extends Model
     // Allow all columns to be mass assigned
     protected $guarded = [];
 
-    protected static function boot()
+    protected static function boot(): void
     {
         parent::boot();
 
-        static::creating(function ($model) {
-            // Auto-assign sequential integer ID if missing or non-numeric
-            if (empty($model->Astronaut) || !is_numeric($model->Astronaut)) {
-                $maxId = (int) (static::max('Astronaut') ?? 0);
-                $model->Astronaut = $maxId + 1;
+        static::creating(function ($model): void {
+            // Auto-assign sequential astronaut ID if missing
+            if (empty($model->Astronaut)) {
+                $maxId = 0;
+                foreach (static::pluck('Astronaut') as $existing) {
+                    preg_match('/\d+/', (string) $existing, $m);
+                    if (! empty($m[0])) {
+                        $maxId = max($maxId, (int) $m[0]);
+                    }
+                }
+                $model->Astronaut = sprintf('AST-%02d', $maxId + 1);
             }
         });
     }

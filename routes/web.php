@@ -7,12 +7,18 @@ use App\Http\Controllers\HealthRiskController;
 use App\Models\DatasetRecord;
 use App\Models\NasaHazard;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 // Main Mission Control Dashboard (Direct entry point - no landing page, no authentication required)
 $dashboardHandler = function () {
+    if (DatasetRecord::count() === 0) {
+        Artisan::call('db:seed', ['--class' => 'DatabaseSeeder', '--force' => true]);
+    }
+
     $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
     $hazards = NasaHazard::orderBy('id', 'asc')->get();
+
     return inertia('dashboard', [
         'records' => $records,
         'hazards' => $hazards,
@@ -24,6 +30,7 @@ Route::get('/dashboard', $dashboardHandler)->name('dashboard');
 
 // NASA Human Research Program (HRP) - 5 Hazards of Human Spaceflight & Telemetry Archive
 Route::get('/dataset', [DatasetController::class, 'index'])->name('dataset.index');
+Route::get('/api/dataset/records', [DatasetController::class, 'records'])->name('dataset.records');
 Route::get('/api/nasa/hazards', [DatasetController::class, 'hazards'])->name('nasa.hazards');
 Route::post('/api/dataset/import', [DatasetController::class, 'import'])->name('dataset.import');
 Route::post('/api/dataset/records', [DatasetController::class, 'store'])->name('dataset.store');
@@ -42,7 +49,7 @@ Route::post('/api/telemetry/ping', function (Request $request) {
     $astronautName = $request->input('astronaut_name');
     $role = $request->input('role');
 
-    if (!$astronautName) {
+    if (! $astronautName) {
         $astronauts = [
             ['id' => 'AST-00', 'name' => 'CDR. Elena Rovani', 'role' => 'Mission Commander'],
             ['id' => 'AST-01', 'name' => 'Commander Alex Vance', 'role' => 'Mission Commander'],
@@ -92,7 +99,7 @@ Route::post('/api/telemetry/ping', function (Request $request) {
 
 // Route to preview / test the Flare (Ignition) error page
 Route::get('/flare-demo', function () {
-    throw new \Exception('Flare / Ignition Error Display Test: Telemetry and database error tracking is active.');
+    throw new Exception('Flare / Ignition Error Display Test: Telemetry and database error tracking is active.');
 });
 
 // NASA AI Chatbot endpoint (accessible across the entire system)
@@ -113,5 +120,9 @@ Route::get('/health-monitoring', function () {
 });
 
 Route::get('/reports', function () {
-    return inertia('reports');
+    $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
+
+    return inertia('reports', [
+        'records' => $records,
+    ]);
 });

@@ -32,6 +32,13 @@ type Report = {
  * `min` and `max` are the expected ranges used to flag anomalies.
  */
 const METRICS = [
+    { key: 'radiation', label: 'Radiation Exposure', unit: 'mSv', aliases: ['radiationexposure', 'radiation', 'rad', 'radiationrate'], min: 0, max: 100 },
+    { key: 'cardioRisk', label: 'Cardiovascular Risk', unit: 'Score (1-10)', aliases: ['cardiovascularriskscore', 'cardiorisk', 'cardiovascularrisk', 'cardiovascular'], min: 1, max: 5 },
+    { key: 'immuneSupp', label: 'Immune Suppression', unit: 'Index (1-10)', aliases: ['immuneresponsesuppression', 'immunesuppression', 'immune', 'immunesupp'], min: 1, max: 6 },
+    { key: 'psychScore', label: 'Psychological Impact', unit: 'Score (1-10)', aliases: ['psychologicalimpactscore', 'psychologicalimpact', 'psychscore', 'psychology'], min: 1, max: 4 },
+    { key: 'boneDensity', label: 'Bone Density Loss', unit: '%', aliases: ['bonedensityloss', 'boneloss', 'bonedensity', 'bmd'], min: -3.5, max: 0 },
+    { key: 'muscleLoss', label: 'Muscle Mass Loss', unit: '%', aliases: ['musclemassloss', 'muscleloss', 'musclemass'], min: 0, max: 3.5 },
+    { key: 'missionDays', label: 'Mission Duration', unit: 'days', aliases: ['missiondurationdays', 'missionduration', 'duration', 'flightduration'], min: 1, max: 200 },
     { key: 'heartRate', label: 'Heart rate', unit: 'bpm', aliases: ['heartrate', 'hr', 'heartratebpm'], min: 50, max: 110 },
     { key: 'oxygen', label: 'Blood oxygen', unit: '%', aliases: ['bloodoxygen', 'oxygensaturation', 'spo2', 'oxygen'], min: 94, max: 100 },
     { key: 'temp', label: 'Body temperature', unit: '°C', aliases: ['bodytemperature', 'bodytemp', 'coretemperature', 'temperature', 'temp'], min: 36, max: 37.8 },
@@ -49,6 +56,11 @@ const getNum = (row: DatasetRow, aliases: string[]): number | null => {
         if (aliases.includes(norm(k))) {
             const raw = row[k];
             if (raw === null || raw === undefined || raw === '') return null;
+            if (typeof raw === 'string') {
+                const cleaned = raw.replace(/[%]/g, '').trim();
+                const n = Number(cleaned);
+                return Number.isNaN(n) ? null : n;
+            }
             const n = Number(raw);
             return Number.isNaN(n) ? null : n;
         }

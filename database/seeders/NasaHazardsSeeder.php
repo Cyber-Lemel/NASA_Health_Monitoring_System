@@ -24,7 +24,7 @@ class NasaHazardsSeeder extends Seeder
                 'icon' => 'Radioactive',
                 'category' => 'Deep Space Environment',
                 'description' => "Above Earth's atmosphere and protective magnetic field, astronauts are exposed to galactic cosmic rays (GCR) from outside the solar system and solar particle events (SPE) from solar coronal mass ejections. Deep space radiation consists of high-energy protons and heavy atomic nuclei (HZE ions) that easily penetrate spacecraft aluminum hull shielding and human biological tissue.",
-                'deep_space_context' => "On a 3-year round trip to Mars or deep space lunar missions (Artemis/Gateway), astronauts will encounter cumulative radiation doses up to 100 times higher than typical background radiation on Earth, drastically elevating lifetime cancer mortality and CNS impairment.",
+                'deep_space_context' => 'On a 3-year round trip to Mars or deep space lunar missions (Artemis/Gateway), astronauts will encounter cumulative radiation doses up to 100 times higher than typical background radiation on Earth, drastically elevating lifetime cancer mortality and CNS impairment.',
                 'key_risks' => [
                     'Increased lifetime risk of exposure-induced death (REID) from lethal carcinomas and leukemia',
                     'Damage to the Central Nervous System (CNS) causing cognitive deceleration, memory deficits, and motor decrements',
@@ -55,7 +55,7 @@ class NasaHazardsSeeder extends Seeder
                 'icon' => 'Moon',
                 'category' => 'Behavioral Health & Performance',
                 'description' => "Expedition crews are confined to tight habitable modules for months or years, completely isolated from family, friends, natural terrestrial sensory variety, and Earth's normal day-night cycle. The psychological friction of prolonged confinement is one of the highest human risks for deep space transit.",
-                'deep_space_context' => "During an extended Mars mission lasting ~1,000 days, astronauts cannot step outside, have no real-time voice calls with loved ones due to distance latency, and must maintain flawless cooperative team dynamics under high-consequence operational pressure.",
+                'deep_space_context' => 'During an extended Mars mission lasting ~1,000 days, astronauts cannot step outside, have no real-time voice calls with loved ones due to distance latency, and must maintain flawless cooperative team dynamics under high-consequence operational pressure.',
                 'key_risks' => [
                     'Severe circadian rhythm desynchronization, chronic sleep debt, and insomnia',
                     'Psychological fatigue, depressive/affective episodes, and motivational decline',
@@ -85,8 +85,8 @@ class NasaHazardsSeeder extends Seeder
                 'tagline' => 'Extreme distance, communication time delay, and the requirement for clinical autonomy',
                 'icon' => 'Compass',
                 'category' => 'Autonomous Exploration Operations',
-                'description' => "As astronauts venture toward the Moon (240,000 miles) and Mars (up to 140-250 million miles), immediate abort to Earth and emergency evacuation become physically impossible. Radio communications experience speed-of-light delays up to 22 minutes each direction, requiring crews to solve complex medical emergencies autonomously.",
-                'deep_space_context' => "If an astronaut develops acute surgical abdomen (e.g. appendicitis), cardiac arrhythmia, or trauma during Mars transit, Mission Control flight surgeons in Houston cannot provide real-time guidance. The crew and onboard AI must independently diagnose and treat.",
+                'description' => 'As astronauts venture toward the Moon (240,000 miles) and Mars (up to 140-250 million miles), immediate abort to Earth and emergency evacuation become physically impossible. Radio communications experience speed-of-light delays up to 22 minutes each direction, requiring crews to solve complex medical emergencies autonomously.',
+                'deep_space_context' => 'If an astronaut develops acute surgical abdomen (e.g. appendicitis), cardiac arrhythmia, or trauma during Mars transit, Mission Control flight surgeons in Houston cannot provide real-time guidance. The crew and onboard AI must independently diagnose and treat.',
                 'key_risks' => [
                     'Communication latency up to 44 minutes round-trip preventing real-time Earth medical consultation',
                     'Inability to evacuate ill or injured crew members or receive emergency medical supply flights',
@@ -116,8 +116,8 @@ class NasaHazardsSeeder extends Seeder
                 'tagline' => 'Transitions between 0g weightlessness, Moon 1/6g, Mars 3/8g, and Earth 1g',
                 'icon' => 'Orbit',
                 'category' => 'Physiological Countermeasures',
-                'description' => "Astronauts experience dramatic gravitational shifts: high-g launch acceleration, continuous microgravity (0g) during transit, partial gravity on the Moon (1/6g) or Mars (3/8g), and abrupt hypergravity during atmospheric entry. Prolonged unloading causes systemic musculoskeletal deconditioning, fluid redistribution, and cardiovascular atrophy.",
-                'deep_space_context' => "Without constant gravity pulling bodily fluids toward the feet, ~2 liters of interstitial fluid shifts cephalad (headward), expanding the optic nerve sheath and causing SANS (Spaceflight-Associated Neuro-ocular Syndrome). Bones shed calcium into urine, increasing kidney stone risk and fragility fractures.",
+                'description' => 'Astronauts experience dramatic gravitational shifts: high-g launch acceleration, continuous microgravity (0g) during transit, partial gravity on the Moon (1/6g) or Mars (3/8g), and abrupt hypergravity during atmospheric entry. Prolonged unloading causes systemic musculoskeletal deconditioning, fluid redistribution, and cardiovascular atrophy.',
+                'deep_space_context' => 'Without constant gravity pulling bodily fluids toward the feet, ~2 liters of interstitial fluid shifts cephalad (headward), expanding the optic nerve sheath and causing SANS (Spaceflight-Associated Neuro-ocular Syndrome). Bones shed calcium into urine, increasing kidney stone risk and fragility fractures.',
                 'key_risks' => [
                     'Progressive bone mineral density (BMD) loss of 1.0% to 1.5% per month in weight-bearing skeleton',
                     'Disuse muscular atrophy with fast-to-slow muscle fiber transition and loss of postural torque',
@@ -148,8 +148,8 @@ class NasaHazardsSeeder extends Seeder
                 'tagline' => 'Hermetic life support ecology, recycled air/water, altered microbiome, and toxic regolith',
                 'icon' => 'Biohazard',
                 'category' => 'Habitability & Life Support Ecology',
-                'description' => "The spacecraft or extraterrestrial surface habitat is an artificial closed ecosystem. Astronauts continuously breathe recycled atmosphere and drink reclaimed condensation and urine. Mechanical systems, toxic trace contaminants, carbon dioxide accumulation, microbial mutations, and extraterrestrial regolith dust present constant threats.",
-                'deep_space_context' => "In a sealed module, common benign bacteria mutate to become more virulent or antibiotic-resistant while crew immune defenses weaken. Lunar and Martian regolith (fine, jagged, chemically reactive mineral dust) clings to EVA suits, abrades airlocks, and threatens pulmonary health.",
+                'description' => 'The spacecraft or extraterrestrial surface habitat is an artificial closed ecosystem. Astronauts continuously breathe recycled atmosphere and drink reclaimed condensation and urine. Mechanical systems, toxic trace contaminants, carbon dioxide accumulation, microbial mutations, and extraterrestrial regolith dust present constant threats.',
+                'deep_space_context' => 'In a sealed module, common benign bacteria mutate to become more virulent or antibiotic-resistant while crew immune defenses weaken. Lunar and Martian regolith (fine, jagged, chemically reactive mineral dust) clings to EVA suits, abrades airlocks, and threatens pulmonary health.',
                 'key_risks' => [
                     'Carbon dioxide (pCO2) elevation causing hypercapnia, cognitive lethargy, headaches, and visual disturbances',
                     'Immune system dysregulation, T-cell suppression, and asymptomatic reactivation of latent viruses (EBV, VZV, CMV)',
@@ -181,4 +181,3 @@ class NasaHazardsSeeder extends Seeder
         }
     }
 }
-

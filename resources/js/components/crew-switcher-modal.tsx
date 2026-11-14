@@ -63,7 +63,13 @@ export default function CrewSwitcherModal({
             const role = String(c.Role || c.role || '').toLowerCase();
 
             const matchesQuery = !q || name.includes(q) || id.includes(q) || country.includes(q) || role.includes(q);
-            const matchesAgency = selectedAgency === 'all' || country.toLowerCase() === selectedAgency.toLowerCase();
+            const normCountry = country.trim().toLowerCase();
+            const normAgency = selectedAgency.trim().toLowerCase();
+            const matchesAgency =
+                normAgency === 'all' ||
+                normCountry === normAgency ||
+                normCountry.includes(normAgency) ||
+                normAgency.includes(normCountry);
 
             return matchesQuery && matchesAgency;
         });
@@ -180,11 +186,25 @@ export default function CrewSwitcherModal({
                             const rawDuration = astronaut['Mission_duration(Days)'] ?? (astronaut as any).duration ?? (astronaut as any).missionDurationDays ?? (astronaut as any).Mission_duration;
                             const duration = (rawDuration !== undefined && rawDuration !== null && !isNaN(Number(rawDuration))) ? Number(rawDuration) : 180;
                             const boneLoss = astronaut.Bone_Density_Loss || '-3.0%';
-                            const isSelected = String(activeAstronautId) === cid;
+                            const normActive = String(activeAstronautId || '').toUpperCase().trim();
+                            const normCid = cid.toUpperCase().trim();
+                            const isSelected =
+                                normActive === normCid ||
+                                (normActive.replace(/\D+/g, '') !== '' &&
+                                    normActive.replace(/\D+/g, '') === normCid.replace(/\D+/g, ''));
 
                             return (
                                 <div
                                     key={`${cid}-${idx}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            onSelectAstronaut(astronaut);
+                                            onClose();
+                                        }
+                                    }}
                                     onClick={() => {
                                         onSelectAstronaut(astronaut);
                                         onClose();
@@ -244,7 +264,12 @@ export default function CrewSwitcherModal({
                                             ) : (
                                                 <button
                                                     type="button"
-                                                    className="px-2.5 py-1 border border-[#1a4b6c] bg-[#030b14] text-[#5cdbdf] hover:border-[#5cdbdf] hover:bg-[#5cdbdf] hover:text-slate-950 transition-all text-[10px] font-bold flex items-center gap-1"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onSelectAstronaut(astronaut);
+                                                        onClose();
+                                                    }}
+                                                    className="px-2.5 py-1 border border-[#1a4b6c] bg-[#030b14] text-[#5cdbdf] hover:border-[#5cdbdf] hover:bg-[#5cdbdf] hover:text-slate-950 transition-all text-[10px] font-bold flex items-center gap-1 cursor-pointer"
                                                 >
                                                     <span>LINK HUD</span>
                                                     <ChevronRight className="w-3 h-3" />

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('dataset_records')) {
+        if (! Schema::hasTable('dataset_records')) {
             Schema::create('dataset_records', function (Blueprint $table) {
                 $table->id();
                 $table->string('Astronaut')->nullable();

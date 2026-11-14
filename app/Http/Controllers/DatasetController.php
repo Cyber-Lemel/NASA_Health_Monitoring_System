@@ -4,17 +4,24 @@ namespace App\Http\Controllers;
 
 use App\Models\DatasetRecord;
 use App\Models\NasaHazard;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Inertia\Response;
 
 class DatasetController extends Controller
 {
     /**
      * Display the full NASA HRP 5 Hazards and astronaut dataset page.
      */
-    public function index()
+    public function index(): Response
     {
+        if (DatasetRecord::count() === 0) {
+            Artisan::call('db:seed', ['--class' => 'DatabaseSeeder', '--force' => true]);
+        }
+
         // Fetch all astronaut records and official NASA 5 Hazards
         $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
         $hazards = NasaHazard::orderBy('id', 'asc')->get();
@@ -26,16 +33,39 @@ class DatasetController extends Controller
     }
 
     /**
+     * Return all astronaut dataset records as JSON.
+     */
+    public function records(): JsonResponse
+    {
+        if (DatasetRecord::count() === 0) {
+            Artisan::call('db:seed', ['--class' => 'DatabaseSeeder', '--force' => true]);
+        }
+
+        $records = DatasetRecord::orderBy('Astronaut', 'asc')->get();
+
+        return response()->json([
+            'success' => true,
+            'count' => $records->count(),
+            'records' => $records,
+        ]);
+    }
+
+    /**
      * Return the 5 Hazards of Human Spaceflight dataset (NASA Human Research Program).
      */
-    public function hazards()
+    public function hazards(): JsonResponse
     {
+        if (NasaHazard::count() === 0) {
+            Artisan::call('db:seed', ['--class' => 'NasaHazardsSeeder', '--force' => true]);
+        }
+
         $hazards = NasaHazard::orderBy('id', 'asc')->get();
 
         return response()->json([
             'success' => true,
             'source' => 'NASA Human Research Program (HRP) - 5 Hazards of Human Spaceflight',
             'url' => 'https://www.nasa.gov/hrp/hazards/',
+            'count' => $hazards->count(),
             'hazards' => $hazards,
         ]);
     }
@@ -43,54 +73,76 @@ class DatasetController extends Controller
     /**
      * Bulk or single import data from payload or uploaded file into the database.
      */
-    public function import(Request $request)
+    public function import(Request $request): JsonResponse
     {
         $records = [];
 
         // 1. Direct file upload handling (CSV or JSON)
         if ($request->hasFile('file')) {
             $file = $request->file('file');
-            $extension = strtolower($file->getClientOriginalExtension());
-
-            if ($extension === 'csv' || $extension === 'txt') {
+            if ($file !== null) {
+                $extension = strtolower($file->getClientOriginalExtension());
                 $filePath = $file->getRealPath();
-                $firstLine = fgets(fopen($filePath, 'r'));
-                // Auto-detect delimiter
-                $delimiters = [',', ';', "\t", '|'];
-                $delimCounts = [];
-                foreach ($delimiters as $d) {
-                    $delimCounts[$d] = substr_count((string)$firstLine, $d);
-                }
-                arsort($delimCounts);
-                $delimiter = key($delimCounts) ?: ',';
-                if ($delimCounts[$delimiter] === 0) {
-                    $delimiter = ',';
-                }
 
-                $handle = fopen($filePath, 'r');
-                $header = null;
-                while (($row = fgetcsv($handle, 5000, $delimiter)) !== false) {
-                    if (!$header) {
-                        // Clean UTF-8 BOM and trim header keys without damaging UTF-8 characters
-                        $header = array_map(function ($h) {
-                            $clean = preg_replace('/^\xEF\xBB\xBF/', '', (string) $h);
-                            return trim($clean);
-                        }, $row);
-                    } else {
-                        if (count($row) === count($header)) {
-                            $records[] = array_combine($header, $row);
-                        } elseif (count($row) > 0 && !empty(array_filter($row))) {
-                            $rowPadded = array_pad(array_slice($row, 0, count($header)), count($header), null);
-                            $records[] = array_combine($header, $rowPadded);
+                if ($filePath !== false && ($extension === 'csv' || $extension === 'txt')) {
+                    $firstLine = '';
+                    $tempStream = fopen($filePath, 'r');
+                    if ($tempStream !== false) {
+                        $read = fgets($tempStream);
+                        if ($read !== false) {
+                            $firstLine = $read;
+                        }
+                        fclose($tempStream);
+                    }
+
+                    // Auto-detect delimiter
+                    $delimiters = [',', ';', "\t", '|'];
+                    $delimCounts = [];
+                    foreach ($delimiters as $d) {
+                        $delimCounts[$d] = substr_count($firstLine, $d);
+                    }
+                    arsort($delimCounts);
+                    $delimiter = ',';
+                    if (current($delimCounts) > 0) {
+                        $delimiter = (string) key($delimCounts);
+                    }
+
+                    $handle = fopen($filePath, 'r');
+                    if ($handle !== false) {
+                        $header = null;
+                        while (($row = fgetcsv($handle, 5000, $delimiter)) !== false) {
+                            if ($header === null) {
+                                // Clean UTF-8 BOM and trim header keys without damaging UTF-8 characters
+                                $header = array_map(function ($h) {
+                                    $clean = preg_replace('/^\xEF\xBB\xBF/', '', (string) $h);
+
+                                    return trim((string) $clean);
+                                }, $row);
+                            } else {
+                                if (count($row) === count($header)) {
+                                    $records[] = array_combine($header, $row);
+                                } elseif (! empty(array_filter($row))) {
+                                    $rowPadded = array_pad(array_slice($row, 0, count($header)), count($header), null);
+                                    $records[] = array_combine($header, $rowPadded);
+                                }
+                            }
+                        }
+                        fclose($handle);
+                    }
+                } elseif ($filePath !== false && $extension === 'json') {
+                    $content = file_get_contents($filePath);
+                    if ($content !== false) {
+                        $json = json_decode($content, true);
+                        if (is_array($json)) {
+                            if (isset($json['records']) && is_array($json['records'])) {
+                                $records = $json['records'];
+                            } elseif (array_is_list($json)) {
+                                $records = $json;
+                            } else {
+                                $records = [$json];
+                            }
                         }
                     }
-                }
-                fclose($handle);
-            } elseif ($extension === 'json') {
-                $content = file_get_contents($file->getRealPath());
-                $json = json_decode($content, true);
-                if (is_array($json)) {
-                    $records = isset($json['records']) ? $json['records'] : (isset($json[0]) ? $json : [$json]);
                 }
             }
         }
@@ -111,7 +163,7 @@ class DatasetController extends Controller
                     $records = $json['detectedRows'];
                 } elseif (isset($json['record']) && is_array($json['record'])) {
                     $records = [$json['record']];
-                } elseif (!empty($json) && !isset($json[0])) {
+                } elseif (! empty($json)) {
                     $records = [$json];
                 }
             }
@@ -124,7 +176,13 @@ class DatasetController extends Controller
             ], 422);
         }
 
-        $maxId = (int) (DatasetRecord::max('Astronaut') ?? 0);
+        $maxId = 0;
+        foreach (DatasetRecord::pluck('Astronaut') as $existing) {
+            preg_match('/\d+/', (string) $existing, $m);
+            if (! empty($m[0])) {
+                $maxId = max($maxId, (int) $m[0]);
+            }
+        }
         $nextAvailableId = $maxId + 1;
         $savedCount = 0;
         $errors = [];
@@ -132,7 +190,7 @@ class DatasetController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $index => $item) {
-                if (!is_array($item)) {
+                if (! is_array($item)) {
                     continue;
                 }
                 try {
@@ -143,17 +201,18 @@ class DatasetController extends Controller
                     );
                     $savedCount++;
                 } catch (\Exception $rowEx) {
-                    Log::warning("Row import failed at index {$index}: " . $rowEx->getMessage());
-                    $errors[] = "Row {$index}: " . $rowEx->getMessage();
+                    Log::warning("Row import failed at index {$index}: ".$rowEx->getMessage());
+                    $errors[] = "Row {$index}: ".$rowEx->getMessage();
                 }
             }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Bulk import transaction failed: ' . $e->getMessage());
+            Log::error('Bulk import transaction failed: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Database import failed: ' . $e->getMessage(),
+                'message' => 'Database import failed: '.$e->getMessage(),
             ], 500);
         }
 
@@ -171,16 +230,22 @@ class DatasetController extends Controller
     /**
      * Manually add a new astronaut record directly to the database.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        $maxId = (int) (DatasetRecord::max('Astronaut') ?? 0);
+        $maxId = 0;
+        foreach (DatasetRecord::pluck('Astronaut') as $existing) {
+            preg_match('/\d+/', (string) $existing, $m);
+            if (! empty($m[0])) {
+                $maxId = max($maxId, (int) $m[0]);
+            }
+        }
         $nextId = $maxId + 1;
 
         $sanitized = $this->sanitizeRecord($request->all(), $nextId);
 
         // Ensure unique primary key
         if (DatasetRecord::where('Astronaut', $sanitized['Astronaut'])->exists()) {
-            $sanitized['Astronaut'] = $nextId;
+            $sanitized['Astronaut'] = sprintf('AST-%02d', $nextId);
         }
 
         $record = DatasetRecord::create($sanitized);
@@ -188,7 +253,7 @@ class DatasetController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Astronaut {$record->Name} (#{$record->Astronaut}) added successfully to the database.",
+            'message' => "Astronaut {$record->Name} ({$record->Astronaut}) added successfully to the database.",
             'record' => $record,
             'records' => $allRecords,
         ]);
@@ -197,10 +262,17 @@ class DatasetController extends Controller
     /**
      * Update an existing astronaut record in the database.
      */
-    public function update(Request $request, $astronaut)
+    public function update(Request $request, int|string $astronaut): JsonResponse
     {
-        $record = DatasetRecord::where('Astronaut', (int) $astronaut)->first();
-        if (!$record) {
+        $searchKey = (string) $astronaut;
+        $stripped = ltrim($searchKey, 'AST-');
+
+        $record = DatasetRecord::where('Astronaut', $searchKey)
+            ->orWhere('Astronaut', $stripped)
+            ->orWhere('id', is_numeric($searchKey) ? (int) $searchKey : 0)
+            ->first();
+
+        if (! $record) {
             return response()->json([
                 'success' => false,
                 'message' => "Astronaut record #{$astronaut} not found in database.",
@@ -216,7 +288,7 @@ class DatasetController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Astronaut {$record->Name} (#{$record->Astronaut}) updated successfully.",
+            'message' => "Astronaut {$record->Name} ({$record->Astronaut}) updated successfully.",
             'record' => $record,
             'records' => $allRecords,
         ]);
@@ -225,10 +297,17 @@ class DatasetController extends Controller
     /**
      * Delete an individual astronaut record from the database.
      */
-    public function destroy($astronaut)
+    public function destroy(int|string $astronaut): JsonResponse
     {
-        $record = DatasetRecord::where('Astronaut', (int) $astronaut)->first();
-        if (!$record) {
+        $searchKey = (string) $astronaut;
+        $stripped = ltrim($searchKey, 'AST-');
+
+        $record = DatasetRecord::where('Astronaut', $searchKey)
+            ->orWhere('Astronaut', $stripped)
+            ->orWhere('id', is_numeric($searchKey) ? (int) $searchKey : 0)
+            ->first();
+
+        if (! $record) {
             return response()->json([
                 'success' => false,
                 'message' => "Astronaut record #{$astronaut} not found in database.",
@@ -236,12 +315,13 @@ class DatasetController extends Controller
         }
 
         $name = $record->Name;
+        $recordKey = $record->Astronaut;
         $record->delete();
         $allRecords = DatasetRecord::orderBy('Astronaut', 'asc')->get();
 
         return response()->json([
             'success' => true,
-            'message' => "Astronaut {$name} (#{$astronaut}) deleted successfully from database.",
+            'message' => "Astronaut {$name} ({$recordKey}) deleted successfully from database.",
             'records' => $allRecords,
         ]);
     }
@@ -249,25 +329,37 @@ class DatasetController extends Controller
     /**
      * Bulk delete selected astronaut records from the database.
      */
-    public function bulkDestroy(Request $request)
+    public function bulkDestroy(Request $request): JsonResponse
     {
         $ids = $request->input('ids', []);
-        if (empty($ids) || !is_array($ids)) {
+        if (empty($ids) || ! is_array($ids)) {
             return response()->json([
                 'success' => false,
                 'message' => 'No astronaut IDs provided for bulk deletion.',
             ], 422);
         }
 
-        $intIds = array_map(function ($id) {
-            if (is_numeric($id)) return (int) $id;
-            preg_match('/\d+/', (string) $id, $matches);
-            return !empty($matches[0]) ? (int) $matches[0] : 0;
-        }, $ids);
+        $allPossibleIds = [];
+        $numericIds = [];
+        foreach ($ids as $id) {
+            $str = trim((string) $id);
+            if ($str === '') {
+                continue;
+            }
+            $allPossibleIds[] = $str;
+            $allPossibleIds[] = ltrim($str, 'AST-');
+            if (is_numeric($str)) {
+                $num = (int) $str;
+                $numericIds[] = $num;
+                $allPossibleIds[] = sprintf('AST-%02d', $num);
+            }
+        }
+        $allPossibleIds = array_values(array_unique($allPossibleIds));
 
-        $intIds = array_filter($intIds, fn($id) => $id > 0);
+        $deletedCount = DatasetRecord::whereIn('Astronaut', $allPossibleIds)
+            ->orWhereIn('id', $numericIds)
+            ->delete();
 
-        $deletedCount = DatasetRecord::whereIn('Astronaut', $intIds)->delete();
         $allRecords = DatasetRecord::orderBy('Astronaut', 'asc')->get();
 
         return response()->json([
@@ -281,8 +373,11 @@ class DatasetController extends Controller
     /**
      * Normalize and sanitize raw record parameters for MySQL dataset_records table,
      * ensuring 100% exact match to provided data without loss or arbitrary overrides.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
      */
-    private function sanitizeRecord(array $item, &$nextAvailableId): array
+    private function sanitizeRecord(array $item, int &$nextAvailableId): array
     {
         // Helper to find value across various casing, abbreviations, and formatting styles
         $find = function (array $keys) use ($item) {
@@ -293,58 +388,69 @@ class DatasetController extends Controller
             }
             // Normalized fallback check (strips spaces, underscores, dashes, parens, %)
             $cleanTargets = array_map(function ($target) {
-                return strtolower(preg_replace('/[^a-z0-9]/i', '', $target));
+                return strtolower((string) preg_replace('/[^a-z0-9]/i', '', $target));
             }, $keys);
 
             foreach ($item as $k => $v) {
-                if ($v === null || $v === '') continue;
-                $cleanK = strtolower(preg_replace('/[^a-z0-9]/i', '', (string) $k));
+                if ($v === null || $v === '') {
+                    continue;
+                }
+                $cleanK = strtolower((string) preg_replace('/[^a-z0-9]/i', '', (string) $k));
                 if (in_array($cleanK, $cleanTargets, true)) {
                     return $v;
                 }
             }
+
             return null;
         };
 
-        // 1. Extract or generate integer Astronaut ID
+        // 1. Extract or generate Astronaut ID
         $rawId = $find(['Astronaut', 'astronaut', 'Astronaut_ID', 'Astronaut ID', 'id', 'ID', 'crew_id', 'code']);
         $id = null;
-        if ($rawId !== null && $rawId !== '') {
-            if (is_numeric($rawId)) {
-                $id = (int) $rawId;
-            } else {
-                preg_match('/\d+/', (string) $rawId, $matches);
-                if (!empty($matches[0])) {
-                    $id = (int) $matches[0];
+        if ($rawId !== null) {
+            $strId = trim((string) $rawId);
+            if ($strId !== '') {
+                $id = $strId;
+            }
+        }
+
+        if ($id === null) {
+            $id = sprintf('AST-%02d', $nextAvailableId++);
+        } else {
+            preg_match('/\d+/', $id, $matches);
+            if (! empty($matches[0])) {
+                $num = (int) $matches[0];
+                if ($num >= $nextAvailableId) {
+                    $nextAvailableId = $num + 1;
                 }
             }
         }
 
-        if ($id === null || $id <= 0) {
-            $id = $nextAvailableId++;
-        } else {
-            if ($id >= $nextAvailableId) {
-                $nextAvailableId = $id + 1;
-            }
-        }
-
         $cleanFloat = function ($val, $default = null) {
-            if ($val === null || $val === '') return $default;
+            if ($val === null || $val === '') {
+                return $default;
+            }
             $str = str_replace(['%', ' ', 'psi', 'd', 'bpm', 'YRS', 'mSv'], '', (string) $val);
+
             return is_numeric($str) ? (float) $str : $default;
         };
 
         $cleanInt = function ($val, $default = null) {
-            if ($val === null || $val === '') return $default;
-            if (is_int($val)) return $val;
+            if ($val === null || $val === '') {
+                return $default;
+            }
+            if (is_int($val)) {
+                return $val;
+            }
             $str = trim((string) $val);
             if (is_numeric($str)) {
                 return (int) round((float) $str);
             }
             $clean = preg_replace('/[^0-9.-]/', '', $str);
-            if ($clean !== '' && is_numeric($clean)) {
+            if ($clean !== null && $clean !== '' && is_numeric($clean)) {
                 return (int) round((float) $clean);
             }
+
             return $default;
         };
 
@@ -352,7 +458,7 @@ class DatasetController extends Controller
         $nameRaw = $find(['Name', 'name', 'Astronaut_Name', 'Astronaut Name', 'Full Name', 'Crew Member', 'Crew', 'Subject', 'Subject Name']);
         $name = ($nameRaw !== null && trim((string) $nameRaw) !== '')
             ? trim((string) $nameRaw)
-            : ('Astronaut_' . $id);
+            : ('Astronaut_'.$id);
 
         $ageRaw = $find([
             'Age_at_mission_start', 'Age at mission start', 'Age_at_Mission_Start',

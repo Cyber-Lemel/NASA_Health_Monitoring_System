@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DatasetRecord;
-use App\Models\NasaHazard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -297,6 +295,9 @@ class HealthRiskController extends Controller
     // EVALUATION HELPERS
     // -------------------------------------------------------------
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateBloodPressure(int $systolic, int $diastolic): array
     {
         $severity = 'NOMINAL';
@@ -372,6 +373,9 @@ class HealthRiskController extends Controller
         ];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateHeartRate(int $hr): array
     {
         if ($hr > 125) {
@@ -397,6 +401,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateSpO2(float $spo2): array
     {
         if ($spo2 < 93.0) {
@@ -433,6 +440,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateCoreTemp(float $temp): array
     {
         if ($temp > 38.2) {
@@ -457,6 +467,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateRadiation(float $rate, float $cumulative): array
     {
         if ($rate > 0.40 || $cumulative > 150.0) {
@@ -482,6 +495,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateBoneDensity(float $loss): array
     {
         if ($loss <= -3.5) {
@@ -506,6 +522,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateCabinCo2(float $pco2): array
     {
         if ($pco2 >= 3.0) {
@@ -530,6 +549,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @return array{indicator?: string, value?: string, risk_severity: string, title?: string, score_penalty: int, pathophysiology?: string, possible_spaceflight_risks?: list<string>, countermeasures: list<string>}
+     */
     private function evaluateHydration(int $hydration): array
     {
         if ($hydration < 68) {
@@ -553,6 +575,9 @@ class HealthRiskController extends Controller
         return ['risk_severity' => 'NOMINAL', 'score_penalty' => 0, 'countermeasures' => []];
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $risks
+     */
     private function buildClinicalSummary(string $riskLevel, array $risks, string $name): string
     {
         if ($riskLevel === 'NOMINAL') {
@@ -565,4 +590,3 @@ class HealthRiskController extends Controller
         return "{$riskLevel} detected for {$name} across {$count} indicator(s). Primary concern: {$topRisk}. Autonomous countermeasures have been generated for immediate execution.";
     }
 }
-

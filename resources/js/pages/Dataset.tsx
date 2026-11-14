@@ -485,10 +485,13 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                 let valB: any = '';
 
                 switch (sortField) {
-                    case 'id':
-                        valA = Number(a.Astronaut ?? a.id ?? 0);
-                        valB = Number(b.Astronaut ?? b.id ?? 0);
+                    case 'id': {
+                        const numA = Number(String(a.Astronaut ?? a.id ?? 0).replace(/\D+/g, '')) || 0;
+                        const numB = Number(String(b.Astronaut ?? b.id ?? 0).replace(/\D+/g, '')) || 0;
+                        valA = numA;
+                        valB = numB;
                         break;
+                    }
                     case 'name':
                         valA = (a.Name || '').toLowerCase();
                         valB = (b.Name || '').toLowerCase();
@@ -1595,7 +1598,7 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                                                     {/* Astronaut ID */}
                                                     <td className="p-3.5 font-bold text-slate-300 font-mono">
                                                         <span className="px-2 py-0.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf]">
-                                                            AST-{recordId}
+                                                            {String(recordId).startsWith('AST-') ? recordId : `AST-${recordId}`}
                                                         </span>
                                                     </td>
 
@@ -2360,7 +2363,7 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                                             {selectedAstronaut.Name || 'Astronaut Specialist'}
                                         </h3>
                                         <span className="text-[11px] text-[#5cdbdf] tracking-widest">
-                                            CALLSIGN: AST-{selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'} • NASA HRP BIOASTRONAUTICS
+                                            CALLSIGN: {String(selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A').startsWith('AST-') ? (selectedAstronaut.Astronaut ?? selectedAstronaut.id) : `AST-${selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'}`} • NASA HRP BIOASTRONAUTICS
                                         </span>
                                     </div>
                                 </div>

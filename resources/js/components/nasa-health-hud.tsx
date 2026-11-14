@@ -137,6 +137,96 @@ const DEFAULT_CREW_ROSTER = [
         Bone_Density_Loss: '-5.1%',
         Role: 'Mission Specialist',
     },
+    {
+        Astronaut: 'AST-04',
+        Name: 'Jeremy Hansen',
+        Country: 'Canada / CSA',
+        Gender: 'Male',
+        Age_at_mission_start: 48,
+        'Mission_duration(Days)': 10,
+        Bone_Density_Loss: '-0.3%',
+        Role: 'Mission Specialist',
+    },
+    {
+        Astronaut: 'AST-05',
+        Name: 'Dr. Peggy Whitson',
+        Country: 'USA / NASA',
+        Gender: 'Female',
+        Age_at_mission_start: 57,
+        'Mission_duration(Days)': 288,
+        Bone_Density_Loss: '-4.8%',
+        Role: 'Payload Specialist',
+    },
+    {
+        Astronaut: 'AST-06',
+        Name: 'Capt. Scott Kelly',
+        Country: 'USA / NASA',
+        Gender: 'Male',
+        Age_at_mission_start: 51,
+        'Mission_duration(Days)': 340,
+        Bone_Density_Loss: '-6.2%',
+        Role: 'Flight Engineer',
+    },
+    {
+        Astronaut: 'AST-07',
+        Name: 'Sunita Williams',
+        Country: 'USA / NASA',
+        Gender: 'Female',
+        Age_at_mission_start: 58,
+        'Mission_duration(Days)': 322,
+        Bone_Density_Loss: '-4.4%',
+        Role: 'Flight Engineer',
+    },
+    {
+        Astronaut: 'AST-08',
+        Name: 'Dr. Samantha Cristoforetti',
+        Country: 'Italy / ESA',
+        Gender: 'Female',
+        Age_at_mission_start: 45,
+        'Mission_duration(Days)': 199,
+        Bone_Density_Loss: '-3.2%',
+        Role: 'Mission Specialist',
+    },
+    {
+        Astronaut: 'AST-09',
+        Name: 'Dr. Jessica Meir',
+        Country: 'USA / NASA',
+        Gender: 'Female',
+        Age_at_mission_start: 42,
+        'Mission_duration(Days)': 205,
+        Bone_Density_Loss: '-3.6%',
+        Role: 'Flight Engineer',
+    },
+    {
+        Astronaut: 'AST-10',
+        Name: 'Thomas Pesquet',
+        Country: 'France / ESA',
+        Gender: 'Male',
+        Age_at_mission_start: 43,
+        'Mission_duration(Days)': 199,
+        Bone_Density_Loss: '-3.1%',
+        Role: 'Flight Engineer',
+    },
+    {
+        Astronaut: 'AST-11',
+        Name: 'Koichi Wakata',
+        Country: 'Japan / JAXA',
+        Gender: 'Male',
+        Age_at_mission_start: 59,
+        'Mission_duration(Days)': 188,
+        Bone_Density_Loss: '-3.4%',
+        Role: 'Flight Engineer',
+    },
+    {
+        Astronaut: 'AST-12',
+        Name: 'Dr. Kjell Lindgren',
+        Country: 'USA / NASA',
+        Gender: 'Male',
+        Age_at_mission_start: 49,
+        'Mission_duration(Days)': 141,
+        Bone_Density_Loss: '-2.2%',
+        Role: 'Flight Surgeon',
+    },
 ];
 
 // Helper to generate dynamic astronaut profile from dataset record
@@ -288,7 +378,24 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     }, [crewId, vitals]);
 
     // Database crew roster
-    const [crewList, setCrewList] = useState<any[]>(() => initialData?.records || []);
+    const [crewList, setCrewList] = useState<any[]>(() =>
+        initialData?.records && initialData.records.length > 0 ? initialData.records : DEFAULT_CREW_ROSTER
+    );
+
+    useEffect(() => {
+        if (initialData?.records && initialData.records.length > 0) {
+            setCrewList(initialData.records);
+        } else {
+            fetch('/api/dataset/records')
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data?.success && data?.records && data.records.length > 0) {
+                        setCrewList(data.records);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [initialData?.records]);
 
     // Modals visibility
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -590,14 +697,15 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
     // Auto-select initial astronaut if dataset loaded
     useEffect(() => {
         if (crewList.length > 0 && activeAstronaut.bio.id === 'AST-00') {
-            const elenaDb = crewList.find(
-                (c) =>
-                    String(c.Astronaut).toUpperCase() === 'AST-00' ||
-                    String(c.Name).toLowerCase().includes('reid wiseman') ||
-                    String(c.Name).toLowerCase().includes('elena rovani')
-            );
-            if (elenaDb) {
-                setActiveAstronaut(generateAstronautProfile(elenaDb, currentTimeStr));
+            const initialCrew =
+                crewList.find(
+                    (c) =>
+                        String(c.Astronaut).toUpperCase() === 'AST-00' ||
+                        String(c.Name).toLowerCase().includes('reid wiseman') ||
+                        String(c.Name).toLowerCase().includes('elena rovani')
+                ) || crewList[0];
+            if (initialCrew) {
+                setActiveAstronaut(generateAstronautProfile(initialCrew, currentTimeStr));
             }
         }
     }, [crewList]);

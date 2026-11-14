@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DatasetRecord;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Models\DatasetRecord;
 
 class ChatbotController extends Controller
 {
@@ -17,7 +18,7 @@ class ChatbotController extends Controller
     /**
      * Handle AI chat queries with real-time internet and NASA knowledge fetching.
      */
-    public function chat(Request $request)
+    public function chat(Request $request): JsonResponse
     {
         $message = trim((string) $request->input('message', ''));
         $history = $request->input('history', []);
@@ -38,21 +39,21 @@ class ChatbotController extends Controller
         $localContext = $this->getLocalAstronautContext($message);
 
         // 3. Check for external Gemini API Key
-        $geminiKey = env('GEMINI_API_KEY');
-        if (!empty($geminiKey)) {
+        $geminiKey = config('services.gemini.api_key');
+        if (is_string($geminiKey) && ! empty($geminiKey)) {
             try {
-                $llmReply = $this->callGeminiApi($message, $history, $internetData, $localContext, $geminiKey);
+                $llmReply = $this->callGeminiApi($message, is_array($history) ? $history : [], $internetData, $localContext, $geminiKey);
                 if ($llmReply) {
                     return response()->json([
                         'success' => true,
                         'reply' => $llmReply,
                         'sources' => $internetData['sources'],
                         'liveDataFetched' => $internetData['liveFetched'],
-                        'timestamp' => gmdate('H:i:s') . ' UTC',
+                        'timestamp' => gmdate('H:i:s').' UTC',
                     ]);
                 }
             } catch (\Exception $e) {
-                Log::warning('Gemini API call failed, falling back to Autonomous NASA AI Engine: ' . $e->getMessage());
+                Log::warning('Gemini API call failed, falling back to Autonomous NASA AI Engine: '.$e->getMessage());
             }
         }
 
@@ -64,12 +65,14 @@ class ChatbotController extends Controller
             'reply' => $synthesis['reply'],
             'sources' => $synthesis['sources'],
             'liveDataFetched' => $internetData['liveFetched'],
-            'timestamp' => gmdate('H:i:s') . ' UTC',
+            'timestamp' => gmdate('H:i:s').' UTC',
         ]);
     }
 
     /**
      * Fetch live data from NASA's official web APIs and spaceflight scientific resources.
+     *
+     * @return array{sources: list<array{title: string, url: string, source: string}>, facts: list<string>, liveFetched: bool}
      */
     private function fetchLiveNasaInternetData(string $query): array
     {
@@ -104,7 +107,7 @@ class ChatbotController extends Controller
                             $extract = $summaryData['extract'] ?? '';
                             if ($extract) {
                                 $liveFetched = true;
-                                $facts[] = "Live Scientific Reference ({$pageTitle}): " . substr($extract, 0, 360) . "...";
+                                $facts[] = "Live Scientific Reference ({$pageTitle}): ".substr($extract, 0, 360).'...';
                                 $sources[] = [
                                     'title' => "{$pageTitle} - Spaceflight Science",
                                     'url' => $summaryData['content_urls']['desktop']['page'] ?? "https://en.wikipedia.org/wiki/{$slug}",
@@ -116,7 +119,7 @@ class ChatbotController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            Log::info('Dynamic scientific search timeout or unreachable: ' . $e->getMessage());
+            Log::info('Dynamic scientific search timeout or unreachable: '.$e->getMessage());
         }
 
         // 2. Query NASA Image & Video Library Search API (official NASA repository)
@@ -130,11 +133,13 @@ class ChatbotController extends Controller
                 $data = $response->json();
                 $items = $data['collection']['items'] ?? [];
 
-                if (!empty($items)) {
+                if (! empty($items)) {
                     $liveFetched = true;
                     $count = 0;
                     foreach ($items as $item) {
-                        if ($count >= 1) break;
+                        if ($count >= 1) {
+                            break;
+                        }
                         $itemData = $item['data'][0] ?? null;
                         if ($itemData) {
                             $title = $itemData['title'] ?? 'NASA Archive Data';
@@ -145,7 +150,7 @@ class ChatbotController extends Controller
                             $facts[] = "NASA [{$center}] Archive ({$date}): \"{$title}\" - {$desc}...";
                             $sources[] = [
                                 'title' => "NASA Media Library: {$title}",
-                                'url' => "https://images.nasa.gov/details/" . ($itemData['nasa_id'] ?? ''),
+                                'url' => 'https://images.nasa.gov/details/'.($itemData['nasa_id'] ?? ''),
                                 'source' => "NASA {$center}",
                             ];
                             $count++;
@@ -154,19 +159,19 @@ class ChatbotController extends Controller
                 }
             }
         } catch (\Exception $e) {
-            Log::info('NASA image search timeout or unreachable: ' . $e->getMessage());
+            Log::info('NASA image search timeout or unreachable: '.$e->getMessage());
         }
 
         // 3. Astronomy Feature check (APOD)
         if (preg_match('/(today|photo|picture|astronomy|star|galaxy|universe|moon|nebula|hubble|telescope)/i', $query)) {
             try {
-                $apodUrl = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY";
+                $apodUrl = 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY';
                 $apodRes = $client->timeout(3)->get($apodUrl);
                 if ($apodRes->successful()) {
                     $apod = $apodRes->json();
-                    if (!empty($apod['title'])) {
+                    if (! empty($apod['title'])) {
                         $liveFetched = true;
-                        $facts[] = "NASA Astronomy Feature ({$apod['date']}): \"{$apod['title']}\" - " . substr($apod['explanation'] ?? '', 0, 280) . "...";
+                        $facts[] = "NASA Astronomy Feature ({$apod['date']}): \"{$apod['title']}\" - ".substr($apod['explanation'] ?? '', 0, 280).'...';
                         $sources[] = [
                             'title' => "NASA Astronomy Feature: {$apod['title']}",
                             'url' => $apod['url'] ?? 'https://apod.nasa.gov/apod/',
@@ -210,7 +215,7 @@ class ChatbotController extends Controller
             if (preg_match('/(astronaut|crew|subject|elena|alex|rovani|vance|dataset|record|cohort)/i', $query)) {
                 $records = DatasetRecord::take(4)->get();
                 if ($records->isNotEmpty()) {
-                    $context .= "System Database Active Subjects: ";
+                    $context .= 'System Database Active Subjects: ';
                     foreach ($records as $r) {
                         $context .= "[{$r->Astronaut}: {$r->Name}, Age: {$r->Age_at_mission_start}, Duration: {$r->{'Mission_duration(Days)'}}d, Bone Loss: {$r->Bone_Density_Loss}] ";
                     }
@@ -225,23 +230,26 @@ class ChatbotController extends Controller
 
     /**
      * Call Google Gemini API if user configured GEMINI_API_KEY.
+     *
+     * @param  array<array<string, mixed>>  $history
+     * @param  array{sources: list<array{title: string, url: string, source: string}>, facts: list<string>, liveFetched: bool}  $internetData
      */
     private function callGeminiApi(string $message, array $history, array $internetData, string $localContext, string $apiKey): ?string
     {
-        $systemPrompt = "You are CAPCOM AI, the official AI Biomedical & Mission Operations Co-Pilot for the ORBIT NASA Astronaut Health Monitoring System developed for long-duration exploration missions.
+        $systemPrompt = 'You are CAPCOM AI, the official AI Biomedical & Mission Operations Co-Pilot for the ORBIT NASA Astronaut Health Monitoring System developed for long-duration exploration missions.
 You provide authoritative, concise, mission-critical spaceflight medical and astronaut health intelligence directly aligned with official NASA Human Research Program (HRP) publications.
 Format answers cleanly with clear markdown headers (### and ####), bold highlights (**term**), and bullet points. Never output raw markdown fences.
 Official NASA References:
 - NASA Human Research Program (HRP): The 5 Hazards of Human Spaceflight (RIDGE: Radiation, Isolation/Confinement, Distance from Earth, Gravity Fields, Hostile/Closed Environments).
 - NASA Spaceflight Human-System Standard (NASA-STD-3001).
 - ORBIT Autonomous Health Risk Analyzer: Microgravity cardiovascular pathophysiology, cephalad fluid shift, Spaceflight-Associated Neuro-ocular Syndrome (SANS), internal jugular vein thrombosis, and radiation dosimetry.
-Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "\n" .
-"System Active Crew Data: " . $localContext;
+Real-Time Live Internet Knowledge: '.implode("\n", $internetData['facts'])."\n".
+'System Active Crew Data: '.$localContext;
 
         $contents = [];
         $contents[] = [
             'role' => 'user',
-            'parts' => [['text' => $systemPrompt . "\n\nUser Question: " . $message]],
+            'parts' => [['text' => $systemPrompt."\n\nUser Question: ".$message]],
         ];
 
         $response = Http::timeout(10)->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}", [
@@ -254,6 +262,7 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
 
         if ($response->successful()) {
             $result = $response->json();
+
             return $result['candidates'][0]['content']['parts'][0]['text'] ?? null;
         }
 
@@ -262,11 +271,14 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
 
     /**
      * Autonomous NASA CAPCOM AI Engine (Synthesizes live internet search + official NASA spaceflight medical knowledge).
+     *
+     * @param  array{sources: list<array{title: string, url: string, source: string}>, facts: list<string>, liveFetched: bool}  $internetData
+     * @return array{reply: string, sources: list<array{title: string, url: string, source: string}>}
      */
     private function synthesizeNasaCapcomResponse(string $message, array $internetData, string $localContext): array
     {
         $q = strtolower($message);
-        $liveFactsText = !empty($internetData['facts']) ? "\n\n**🌐 Live DSN Internet Uplink Data:**\n- " . implode("\n- ", $internetData['facts']) : '';
+        $liveFactsText = ! empty($internetData['facts']) ? "\n\n**🌐 Live DSN Internet Uplink Data:**\n- ".implode("\n- ", $internetData['facts']) : '';
         $sources = $internetData['sources'];
 
         // =========================================================================
@@ -293,25 +305,25 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### 🫀 ORBIT Biomedical Alert: Astronaut Blood Pressure & Spaceflight Health Risks\n\n"
-                . "In microgravity (0g), blood pressure behaves dramatically differently than on Earth. Without hydrostatic downward pressure, approximately **2,000 mL of vascular fluid shifts cephalad** (into the thoracic cavity and head). When an astronaut develops high blood pressure (Systolic ≥ 130–140 mmHg, or Crisis ≥ 160/100 mmHg), the physiological risks multiply exponentially:\n\n"
-                . "#### ⚠️ Primary Spaceflight Health Risks from High Blood Pressure:\n\n"
-                . "1. **Acute SANS (Spaceflight-Associated Neuro-ocular Syndrome) Amplification**:\n"
-                . "   - Cephalad fluid shift combined with high arterial blood pressure severely impairs cerebral venous outflow.\n"
-                . "   - **Pathology**: Causes marked intracranial venous hypertension, bilateral **optic disc edema (papilledema)**, posterior globe flattening, and choroidal micro-folds.\n"
-                . "   - **Consequence**: Permanent loss of visual acuity, which directly jeopardizes navigation, EVA spacewalks, and docking operations.\n\n"
-                . "2. **Internal Jugular Vein (IJV) Thrombosis & Cerebrovascular Stroke**:\n"
-                . "   - Studies on the ISS demonstrated that altered hemodynamics and elevated central venous pressures can cause stagnant or retrograde flow in the internal jugular vein.\n"
-                . "   - **Consequence**: Thrombus (blood clot) formation leading to pulmonary embolism or ischemic/hemorrhagic stroke. On a Mars mission with a 22-minute communication delay, an acute stroke is life-threatening.\n\n"
-                . "3. **Left Ventricular Wall Remodeling & Cardiac Arrhythmia**:\n"
-                . "   - Microgravity causes myocardial muscle mass reduction due to lack of gravity load. Severe hypertension overloads the deconditioned myocardium, triggering supraventricular tachycardias or atrial fibrillation.\n\n"
-                . "4. **Catastrophic Re-Entry Orthostatic Collapse**:\n"
-                . "   - When transitioning from 0g back to Martian gravity (0.38g) or Earth (1g), astronauts who sustained hypertension and autonomic baroreceptor dysregulation experience profound downward blood pooling, precipitating immediate syncope (blackout).\n\n"
-                . "#### 🛡️ Autonomous NASA Countermeasures (Protocol NASA-STD-3001):\n"
-                . "- **Lower Body Negative Pressure (LBNP)**: Deploy the LBNP decompression chamber (-35 to -45 mmHg for 60–90 min) to draw thoracic blood back into the lower extremities.\n"
-                . "- **Autonomous Formulary**: Administer oral antihypertensives (Lisinopril 10 mg PO or Losartan 50 mg PO) from the spacecraft medical kit.\n"
-                . "- **Ultrasound Telemetry**: Perform immediate ultrasound evaluation of Optic Nerve Sheath Diameter (ONSD) and bilateral internal jugular vein Doppler flow.\n"
-                . "- **Live Risk Evaluation**: Use ORBIT's live **Health Risk Analyzer** in the HUD or query `POST /api/astronaut/health-risk/analyze` with real-time parameters."
-                . $liveFactsText;
+                ."In microgravity (0g), blood pressure behaves dramatically differently than on Earth. Without hydrostatic downward pressure, approximately **2,000 mL of vascular fluid shifts cephalad** (into the thoracic cavity and head). When an astronaut develops high blood pressure (Systolic ≥ 130–140 mmHg, or Crisis ≥ 160/100 mmHg), the physiological risks multiply exponentially:\n\n"
+                ."#### ⚠️ Primary Spaceflight Health Risks from High Blood Pressure:\n\n"
+                ."1. **Acute SANS (Spaceflight-Associated Neuro-ocular Syndrome) Amplification**:\n"
+                ."   - Cephalad fluid shift combined with high arterial blood pressure severely impairs cerebral venous outflow.\n"
+                ."   - **Pathology**: Causes marked intracranial venous hypertension, bilateral **optic disc edema (papilledema)**, posterior globe flattening, and choroidal micro-folds.\n"
+                ."   - **Consequence**: Permanent loss of visual acuity, which directly jeopardizes navigation, EVA spacewalks, and docking operations.\n\n"
+                ."2. **Internal Jugular Vein (IJV) Thrombosis & Cerebrovascular Stroke**:\n"
+                ."   - Studies on the ISS demonstrated that altered hemodynamics and elevated central venous pressures can cause stagnant or retrograde flow in the internal jugular vein.\n"
+                ."   - **Consequence**: Thrombus (blood clot) formation leading to pulmonary embolism or ischemic/hemorrhagic stroke. On a Mars mission with a 22-minute communication delay, an acute stroke is life-threatening.\n\n"
+                ."3. **Left Ventricular Wall Remodeling & Cardiac Arrhythmia**:\n"
+                ."   - Microgravity causes myocardial muscle mass reduction due to lack of gravity load. Severe hypertension overloads the deconditioned myocardium, triggering supraventricular tachycardias or atrial fibrillation.\n\n"
+                ."4. **Catastrophic Re-Entry Orthostatic Collapse**:\n"
+                ."   - When transitioning from 0g back to Martian gravity (0.38g) or Earth (1g), astronauts who sustained hypertension and autonomic baroreceptor dysregulation experience profound downward blood pooling, precipitating immediate syncope (blackout).\n\n"
+                ."#### 🛡️ Autonomous NASA Countermeasures (Protocol NASA-STD-3001):\n"
+                ."- **Lower Body Negative Pressure (LBNP)**: Deploy the LBNP decompression chamber (-35 to -45 mmHg for 60–90 min) to draw thoracic blood back into the lower extremities.\n"
+                ."- **Autonomous Formulary**: Administer oral antihypertensives (Lisinopril 10 mg PO or Losartan 50 mg PO) from the spacecraft medical kit.\n"
+                ."- **Ultrasound Telemetry**: Perform immediate ultrasound evaluation of Optic Nerve Sheath Diameter (ONSD) and bilateral internal jugular vein Doppler flow.\n"
+                ."- **Live Risk Evaluation**: Use ORBIT's live **Health Risk Analyzer** in the HUD or query `POST /api/astronaut/health-risk/analyze` with real-time parameters."
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -340,28 +352,28 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### ⚠️ Official NASA Briefing: The 5 Hazards of Human Spaceflight (RIDGE)\n\n"
-                . "According to the official **NASA Human Research Program (HRP)**, astronauts embarking on long-duration exploration missions face five interconnected environmental hazards, summarized by the NASA acronym **RIDGE**:\n\n"
-                . "#### 1. Space Radiation (R)\n"
-                . "- **The Hazard**: Beyond Earth’s protective magnetosphere and atmosphere, astronauts are exposed to **Galactic Cosmic Rays (GCR)** and unpredictable **Solar Particle Events (SPE)**.\n"
-                . "- **Physiological Impact**: Radiation damages DNA, elevates lifetime risk of exposure-induced death (**REID**) from cancer, causes cataractogenesis, cardiac damage, and central nervous system (CNS) cognitive impairment.\n"
-                . "- **NASA Countermeasures**: Real-time radiation dosimetry, storm shelter configurations utilizing spacecraft water walls, and pharmaceutical radioprotectants.\n\n"
-                . "#### 2. Isolation and Confinement (I)\n"
-                . "- **The Hazard**: Crews are confined to small, enclosed spaces with a select group of people for months or years with zero direct sunlight or fresh air.\n"
-                . "- **Physiological Impact**: Circadian rhythm desynchronization, severe sleep loss, psychological fatigue, interpersonal friction, and cognitive performance decline.\n"
-                . "- **NASA Countermeasures**: ISS dynamic Solid-State LED spectrum lighting (blue-enriched morning vs. melatonin-promoting evening light), mandatory 8-hour sleep schedules, private crew quarters, and Earth-ambient virtual reality.\n\n"
-                . "#### 3. Distance from Earth (D)\n"
-                . "- **The Hazard**: While the Moon is ~240,000 miles away (3 days return), Mars is ~140 million miles away. Communication experiences a **speed-of-light delay of up to 22 minutes each way** (44-minute round-trip).\n"
-                . "- **Physiological Impact**: Earth Mission Control flight surgeons cannot provide real-time telemedicine during a critical medical event. Resupply flights and rapid medical evacuation are impossible.\n"
-                . "- **NASA Countermeasures**: Autonomous clinical capabilities, AI diagnostic decision-support (ORBIT), extended-shelf-life surgical packs, and comprehensive pre-flight autonomous medical training.\n\n"
-                . "#### 4. Gravity Fields (G)\n"
-                . "- **The Hazard**: Astronauts navigate three gravity transitions: weightlessness (**0g**) during transit, Martian gravity (**0.38g**) or Lunar gravity (**0.16g**), and Earth’s gravity (**1g**) upon return.\n"
-                . "- **Physiological Impact**: Rapid **bone mineral density loss** (1.0% to 1.5% monthly), skeletal muscle atrophy (especially postural calf/spine muscles), cardiovascular deconditioning, cephalad fluid shift causing **SANS** (Spaceflight-Associated Neuro-ocular Syndrome), and orthostatic collapse upon re-entry.\n"
-                . "- **NASA Countermeasures**: Daily 2.5-hour workouts on the **ARED** (Advanced Resistive Exercise Device) and T2 treadmill, Lower Body Negative Pressure (LBNP) suits, and bisphosphonate therapeutics.\n\n"
-                . "#### 5. Hostile / Closed Environments (E)\n"
-                . "- **The Hazard**: The spacecraft or planetary habitat is a completely closed ecosystem where temperature, humidity, airflow, and atmospheric gases must be perpetually regulated.\n"
-                . "- **Physiological Impact**: Elevated carbon dioxide (CO2) toxicity causing headaches and lethargy, altered microbiome virulence, acoustic stress from life-support machinery, and exposure to toxic, abrasive **planetary regolith** (lunar/Martian dust) damaging lung tissue and seals.\n"
-                . "- **NASA Countermeasures**: Environmental Control and Life Support Systems (**ECLSS**) recycling >98% of water and oxygen, catalytic Sabatier reactors, HEPA filtration, and strict dust mitigation airlocks."
-                . $liveFactsText;
+                ."According to the official **NASA Human Research Program (HRP)**, astronauts embarking on long-duration exploration missions face five interconnected environmental hazards, summarized by the NASA acronym **RIDGE**:\n\n"
+                ."#### 1. Space Radiation (R)\n"
+                ."- **The Hazard**: Beyond Earth’s protective magnetosphere and atmosphere, astronauts are exposed to **Galactic Cosmic Rays (GCR)** and unpredictable **Solar Particle Events (SPE)**.\n"
+                ."- **Physiological Impact**: Radiation damages DNA, elevates lifetime risk of exposure-induced death (**REID**) from cancer, causes cataractogenesis, cardiac damage, and central nervous system (CNS) cognitive impairment.\n"
+                ."- **NASA Countermeasures**: Real-time radiation dosimetry, storm shelter configurations utilizing spacecraft water walls, and pharmaceutical radioprotectants.\n\n"
+                ."#### 2. Isolation and Confinement (I)\n"
+                ."- **The Hazard**: Crews are confined to small, enclosed spaces with a select group of people for months or years with zero direct sunlight or fresh air.\n"
+                ."- **Physiological Impact**: Circadian rhythm desynchronization, severe sleep loss, psychological fatigue, interpersonal friction, and cognitive performance decline.\n"
+                ."- **NASA Countermeasures**: ISS dynamic Solid-State LED spectrum lighting (blue-enriched morning vs. melatonin-promoting evening light), mandatory 8-hour sleep schedules, private crew quarters, and Earth-ambient virtual reality.\n\n"
+                ."#### 3. Distance from Earth (D)\n"
+                ."- **The Hazard**: While the Moon is ~240,000 miles away (3 days return), Mars is ~140 million miles away. Communication experiences a **speed-of-light delay of up to 22 minutes each way** (44-minute round-trip).\n"
+                ."- **Physiological Impact**: Earth Mission Control flight surgeons cannot provide real-time telemedicine during a critical medical event. Resupply flights and rapid medical evacuation are impossible.\n"
+                ."- **NASA Countermeasures**: Autonomous clinical capabilities, AI diagnostic decision-support (ORBIT), extended-shelf-life surgical packs, and comprehensive pre-flight autonomous medical training.\n\n"
+                ."#### 4. Gravity Fields (G)\n"
+                ."- **The Hazard**: Astronauts navigate three gravity transitions: weightlessness (**0g**) during transit, Martian gravity (**0.38g**) or Lunar gravity (**0.16g**), and Earth’s gravity (**1g**) upon return.\n"
+                ."- **Physiological Impact**: Rapid **bone mineral density loss** (1.0% to 1.5% monthly), skeletal muscle atrophy (especially postural calf/spine muscles), cardiovascular deconditioning, cephalad fluid shift causing **SANS** (Spaceflight-Associated Neuro-ocular Syndrome), and orthostatic collapse upon re-entry.\n"
+                ."- **NASA Countermeasures**: Daily 2.5-hour workouts on the **ARED** (Advanced Resistive Exercise Device) and T2 treadmill, Lower Body Negative Pressure (LBNP) suits, and bisphosphonate therapeutics.\n\n"
+                ."#### 5. Hostile / Closed Environments (E)\n"
+                ."- **The Hazard**: The spacecraft or planetary habitat is a completely closed ecosystem where temperature, humidity, airflow, and atmospheric gases must be perpetually regulated.\n"
+                ."- **Physiological Impact**: Elevated carbon dioxide (CO2) toxicity causing headaches and lethargy, altered microbiome virulence, acoustic stress from life-support machinery, and exposure to toxic, abrasive **planetary regolith** (lunar/Martian dust) damaging lung tissue and seals.\n"
+                .'- **NASA Countermeasures**: Environmental Control and Life Support Systems (**ECLSS**) recycling >98% of water and oxygen, catalytic Sabatier reactors, HEPA filtration, and strict dust mitigation airlocks.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -384,13 +396,13 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### 🦴 NASA Biomedical Analysis: Microgravity Bone Mineral Density Loss (BMD)\n\n"
-                . "In microgravity environments, astronauts experience rapid skeletal demineralization, losing approximately **1.0% to 1.5%** of bone mineral density per month, primarily affecting weight-bearing skeletal structures like the **lumbar spine, femoral neck, and calcaneus**.\n\n"
-                . "#### Key Pathophysiology & Mechanisms:\n"
-                . "- **Mechanical Unloading**: The removal of gravitational mechanical load triggers elevated osteoclastic resorption while down-regulating osteoblastic bone formation.\n"
-                . "- **Secondary Risk**: Massive bone calcium excretion into the bloodstream and urine, substantially increasing the incidence of **renal nephrolithiasis (kidney stones)**.\n"
-                . "- **Current Countermeasures**: Daily 2.5-hour exercise regimens utilizing the **ARED (Advanced Resistive Exercise Device)** and T2 Cycle Ergometer, supplemented with bisphosphonates (alendronate/zoledronic acid) and Vitamin D3.\n\n"
-                . "📊 **System Benchmark**: Standard NASA long-duration missions (180+ days) observe mean bone density shifts of approximately **-3.0% to -4.5%** without active intervention countermeasures."
-                . $liveFactsText;
+                ."In microgravity environments, astronauts experience rapid skeletal demineralization, losing approximately **1.0% to 1.5%** of bone mineral density per month, primarily affecting weight-bearing skeletal structures like the **lumbar spine, femoral neck, and calcaneus**.\n\n"
+                ."#### Key Pathophysiology & Mechanisms:\n"
+                ."- **Mechanical Unloading**: The removal of gravitational mechanical load triggers elevated osteoclastic resorption while down-regulating osteoblastic bone formation.\n"
+                ."- **Secondary Risk**: Massive bone calcium excretion into the bloodstream and urine, substantially increasing the incidence of **renal nephrolithiasis (kidney stones)**.\n"
+                ."- **Current Countermeasures**: Daily 2.5-hour exercise regimens utilizing the **ARED (Advanced Resistive Exercise Device)** and T2 Cycle Ergometer, supplemented with bisphosphonates (alendronate/zoledronic acid) and Vitamin D3.\n\n"
+                .'📊 **System Benchmark**: Standard NASA long-duration missions (180+ days) observe mean bone density shifts of approximately **-3.0% to -4.5%** without active intervention countermeasures.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -408,13 +420,13 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### 👁️ NASA Medical Protocol: Spaceflight-Associated Neuro-ocular Syndrome (SANS)\n\n"
-                . "**SANS** is a critical physiological condition affecting astronauts during long-duration orbital missions, discovered primarily on the International Space Station.\n\n"
-                . "#### Pathophysiology & Clinical Manifestations:\n"
-                . "- **Cephalad Fluid Shift**: Without gravity pulling bodily fluids downward, approximately **2 liters of fluid** shifts toward the head, elevating venous and intracranial pressure (**ICP**).\n"
-                . "- **Structural Changes**: Results in bilateral **optic disc edema**, posterior globe flattening, choroidal folds, and hyperopic refractive shift (progressive farsightedness).\n"
-                . "- **Operational Impact**: Can permanently compromise astronaut visual acuity required for piloting, robotics, and extravehicular operations.\n"
-                . "- **Active NASA Mitigations**: Lower Body Negative Pressure (**LBNP**) testing to sequester fluids to the lower extremities, chorioretinal ultrasound monitoring, and adjustable focal eyeglasses."
-                . $liveFactsText;
+                ."**SANS** is a critical physiological condition affecting astronauts during long-duration orbital missions, discovered primarily on the International Space Station.\n\n"
+                ."#### Pathophysiology & Clinical Manifestations:\n"
+                ."- **Cephalad Fluid Shift**: Without gravity pulling bodily fluids downward, approximately **2 liters of fluid** shifts toward the head, elevating venous and intracranial pressure (**ICP**).\n"
+                ."- **Structural Changes**: Results in bilateral **optic disc edema**, posterior globe flattening, choroidal folds, and hyperopic refractive shift (progressive farsightedness).\n"
+                ."- **Operational Impact**: Can permanently compromise astronaut visual acuity required for piloting, robotics, and extravehicular operations.\n"
+                .'- **Active NASA Mitigations**: Lower Body Negative Pressure (**LBNP**) testing to sequester fluids to the lower extremities, chorioretinal ultrasound monitoring, and adjustable focal eyeglasses.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -432,13 +444,13 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### ☢️ Deep Space Radiation Dosimetry & Space Environment Alert\n\n"
-                . "Astronauts beyond Low Earth Orbit (LEO) are subjected to two primary radiation sources: **Galactic Cosmic Rays (GCR)** (high-energy atomic nuclei) and unpredictable **Solar Particle Events (SPE)**.\n\n"
-                . "#### NASA Radiation Exposure Standards (NASA-STD-3001):\n"
-                . "- **ISS Nominal Ambient**: ~**0.2 to 0.5 mSv/day** (equivalent to ~1 chest X-ray daily).\n"
-                . "- **Lunar & Deep Space Transit**: ~**1.0 to 1.8 mSv/day**.\n"
-                . "- **Career Permissible Exposure Limit (REID)**: Strictly capped to prevent more than a **3% mean risk of exposure-induced death**.\n"
-                . "- **Emergency Countermeasure**: In the event of a high-energy coronal mass ejection (CME), crew members retreat into the **Orion / Lunar Gateway Water Wall Storm Shelter**."
-                . $liveFactsText;
+                ."Astronauts beyond Low Earth Orbit (LEO) are subjected to two primary radiation sources: **Galactic Cosmic Rays (GCR)** (high-energy atomic nuclei) and unpredictable **Solar Particle Events (SPE)**.\n\n"
+                ."#### NASA Radiation Exposure Standards (NASA-STD-3001):\n"
+                ."- **ISS Nominal Ambient**: ~**0.2 to 0.5 mSv/day** (equivalent to ~1 chest X-ray daily).\n"
+                ."- **Lunar & Deep Space Transit**: ~**1.0 to 1.8 mSv/day**.\n"
+                ."- **Career Permissible Exposure Limit (REID)**: Strictly capped to prevent more than a **3% mean risk of exposure-induced death**.\n"
+                .'- **Emergency Countermeasure**: In the event of a high-energy coronal mass ejection (CME), crew members retreat into the **Orion / Lunar Gateway Water Wall Storm Shelter**.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -456,13 +468,13 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### 🛡️ NASA Extravehicular Mobility Unit (EMU / xEMU) Life Support Diagnostics\n\n"
-                . "During spacewalks (EVA), the Portable Life Support System (PLSS) maintains an autonomous atmospheric envelope protecting the astronaut from the hard vacuum and thermal extremes of space (-150°C to +120°C).\n\n"
-                . "#### Nominal System Operating Thresholds:\n"
-                . "- **Internal Suit Pressure**: **4.3 PSI (29.6 kPa)** utilizing 100% pure oxygen to avoid barotrauma and decompression sickness (the bends).\n"
-                . "- **CO2 Scrubbing**: Metal Oxide (MetOx) canisters or Rapid Cycling Amine (RCA) regenerative scrubbers maintain pCO2 under **0.3 mmHg**.\n"
-                . "- **Thermal Regulation**: Liquid Cooling & Ventilation Garment (LCVG) pumping chilled water at ~**1.5 liters/min** through 91 meters of embedded tubing.\n"
-                . "- **O2 Reserves**: Primary and secondary high-pressure tanks (850 PSI) yielding **7.0 hours nominal EVA** plus 30-minute reserve."
-                . $liveFactsText;
+                ."During spacewalks (EVA), the Portable Life Support System (PLSS) maintains an autonomous atmospheric envelope protecting the astronaut from the hard vacuum and thermal extremes of space (-150°C to +120°C).\n\n"
+                ."#### Nominal System Operating Thresholds:\n"
+                ."- **Internal Suit Pressure**: **4.3 PSI (29.6 kPa)** utilizing 100% pure oxygen to avoid barotrauma and decompression sickness (the bends).\n"
+                ."- **CO2 Scrubbing**: Metal Oxide (MetOx) canisters or Rapid Cycling Amine (RCA) regenerative scrubbers maintain pCO2 under **0.3 mmHg**.\n"
+                ."- **Thermal Regulation**: Liquid Cooling & Ventilation Garment (LCVG) pumping chilled water at ~**1.5 liters/min** through 91 meters of embedded tubing.\n"
+                .'- **O2 Reserves**: Primary and secondary high-pressure tanks (850 PSI) yielding **7.0 hours nominal EVA** plus 30-minute reserve.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -480,12 +492,12 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
             ];
 
             $reply = "### 🚀 NASA Deep Space Mission Operations Briefing\n\n"
-                . "NASA's **Artemis Campaign** is establishing sustainable human exploration on the lunar South Pole and paving the roadmap for crewed human missions to Mars.\n\n"
-                . "#### Key Mission Architecture:\n"
-                . "- **Space Launch System (SLS) & Orion**: Providing heavy-lift crew transport with advanced radiation storm shielding.\n"
-                . "- **Lunar Gateway**: An orbital outpost in Near-Rectilinear Halo Orbit (NRHO) serving as a biomedical relay and science station.\n"
-                . "- **Autonomous Health Support**: Because round-trip light time communications to Mars span **6 to 44 minutes**, the ORBIT system implements autonomous biomedical diagnostics and AI predictive intervention without reliance on Earth mission control."
-                . $liveFactsText;
+                ."NASA's **Artemis Campaign** is establishing sustainable human exploration on the lunar South Pole and paving the roadmap for crewed human missions to Mars.\n\n"
+                ."#### Key Mission Architecture:\n"
+                ."- **Space Launch System (SLS) & Orion**: Providing heavy-lift crew transport with advanced radiation storm shielding.\n"
+                ."- **Lunar Gateway**: An orbital outpost in Near-Rectilinear Halo Orbit (NRHO) serving as a biomedical relay and science station.\n"
+                .'- **Autonomous Health Support**: Because round-trip light time communications to Mars span **6 to 44 minutes**, the ORBIT system implements autonomous biomedical diagnostics and AI predictive intervention without reliance on Earth mission control.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => array_merge($officialSources, $sources)];
         }
@@ -495,17 +507,17 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
         // =========================================================================
         if (preg_match('/(vance|elena|rovani|alex|telemetry|bpm|heart|spo2|vital|subject|crew|status)/i', $q)) {
             $reply = "### 🧑‍🚀 ORBIT Mission Control Live Telemetry Diagnostic Status\n\n"
-                . "Current mission control biomedical telemetry feed synchronized over the Deep Space Network (DSN Goldstone channel):\n\n"
-                . "#### Active Telemetry Channel (AST-00 // CDR. Elena Rovani):\n"
-                . "- **Heart Rate (ECG)**: **76 BPM** *(Nominal Sinus Rhythm, R-peak synchronized)*.\n"
-                . "- **Oxygen Saturation (SpO2)**: **98.6%** *(Well above 95% hypoxemia alert threshold)*.\n"
-                . "- **Core Body Temperature**: **37.0 °C** *(Thermo-neutral status)*.\n"
-                . "- **EMU Suit Pressure**: **4.3 PSI** *(Nominal 100% O2 envelope)*.\n"
-                . "- **Ambient Dosimetry**: **0.214 mSv/h** *(Nominal galactic background)*.\n"
-                . "- **Mission Elapsed Time**: **MET +14:08:32**.\n\n"
-                . ($localContext ? "🗄️ **Database Summary**: " . $localContext . "\n\n" : "")
-                . "All monitored biomedical channels remain within nominal NASA-STD-3001 Level-4 parameters."
-                . $liveFactsText;
+                ."Current mission control biomedical telemetry feed synchronized over the Deep Space Network (DSN Goldstone channel):\n\n"
+                ."#### Active Telemetry Channel (AST-00 // CDR. Elena Rovani):\n"
+                ."- **Heart Rate (ECG)**: **76 BPM** *(Nominal Sinus Rhythm, R-peak synchronized)*.\n"
+                ."- **Oxygen Saturation (SpO2)**: **98.6%** *(Well above 95% hypoxemia alert threshold)*.\n"
+                ."- **Core Body Temperature**: **37.0 °C** *(Thermo-neutral status)*.\n"
+                ."- **EMU Suit Pressure**: **4.3 PSI** *(Nominal 100% O2 envelope)*.\n"
+                ."- **Ambient Dosimetry**: **0.214 mSv/h** *(Nominal galactic background)*.\n"
+                ."- **Mission Elapsed Time**: **MET +14:08:32**.\n\n"
+                .($localContext ? '🗄️ **Database Summary**: '.$localContext."\n\n" : '')
+                .'All monitored biomedical channels remain within nominal NASA-STD-3001 Level-4 parameters.'
+                .$liveFactsText;
 
             return ['reply' => $reply, 'sources' => $sources];
         }
@@ -513,28 +525,28 @@ Real-Time Live Internet Knowledge: " . implode("\n", $internetData['facts']) . "
         // =========================================================================
         // CATEGORY 8: Dynamic Synthesis using Live Internet Facts
         // =========================================================================
-        if (!empty($internetData['facts'])) {
+        if (! empty($internetData['facts'])) {
             $factsFormatted = implode("\n- ", $internetData['facts']);
             $reply = "### 🛰️ NASA Mission Intelligence • Live DSN Archive Synthesis\n\n"
-                . "Telemetry downlink query verified. Here is the authoritative information retrieved from NASA archives and real-time scientific registries regarding **\"{$message}\"**:\n\n"
-                . "#### Scientific Findings & Flight Telemetry:\n"
-                . "- {$factsFormatted}\n\n"
-                . "#### Operational Note:\n"
-                . "All data has been cross-referenced with NASA-STD-3001 mission parameters and open spaceflight biomedical literature.";
+                ."Telemetry downlink query verified. Here is the authoritative information retrieved from NASA archives and real-time scientific registries regarding **\"{$message}\"**:\n\n"
+                ."#### Scientific Findings & Flight Telemetry:\n"
+                ."- {$factsFormatted}\n\n"
+                ."#### Operational Note:\n"
+                .'All data has been cross-referenced with NASA-STD-3001 mission parameters and open spaceflight biomedical literature.';
 
             return ['reply' => $reply, 'sources' => $sources];
         }
 
         // General NASA & Space Intelligence Default
         $reply = "### 🛰️ ORBIT CAPCOM Flight Assistant • Telemetry Report\n\n"
-            . "Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **NASA Human Research Program (HRP) 5 Hazards Database (https://www.nasa.gov/hrp/hazards/)**, and ORBIT biomedical telemetry streams.\n\n"
-            . "#### Ready to assist with:\n"
-            . "- **The 5 Hazards of Human Spaceflight (RIDGE)**: Radiation, Isolation, Distance, Gravity, and Hostile Environments.\n"
-            . "- **Astronaut Biomedical Telemetry**: Real-time heart rate, SpO2, core temp, and ECG analysis.\n"
-            . "- **Microgravity Physiology**: Bone mineral density loss, SANS neuro-ocular syndrome, and muscle atrophy.\n"
-            . "- **Spacesuit Life Support**: PLSS oxygen flow, CO2 scrubbing, sublimators, and suit pressure.\n"
-            . "- **Active NASA Missions**: Artemis lunar return, Orion spacecraft, and Mars exploration programs.\n\n"
-            . "Please transmit your specific query or select a mission telemetry command.";
+            ."Roger, standing by. I am connected to the **NASA Deep Space Network (DSN)**, the **NASA Human Research Program (HRP) 5 Hazards Database (https://www.nasa.gov/hrp/hazards/)**, and ORBIT biomedical telemetry streams.\n\n"
+            ."#### Ready to assist with:\n"
+            ."- **The 5 Hazards of Human Spaceflight (RIDGE)**: Radiation, Isolation, Distance, Gravity, and Hostile Environments.\n"
+            ."- **Astronaut Biomedical Telemetry**: Real-time heart rate, SpO2, core temp, and ECG analysis.\n"
+            ."- **Microgravity Physiology**: Bone mineral density loss, SANS neuro-ocular syndrome, and muscle atrophy.\n"
+            ."- **Spacesuit Life Support**: PLSS oxygen flow, CO2 scrubbing, sublimators, and suit pressure.\n"
+            ."- **Active NASA Missions**: Artemis lunar return, Orion spacecraft, and Mars exploration programs.\n\n"
+            .'Please transmit your specific query or select a mission telemetry command.';
 
         return ['reply' => $reply, 'sources' => $sources];
     }

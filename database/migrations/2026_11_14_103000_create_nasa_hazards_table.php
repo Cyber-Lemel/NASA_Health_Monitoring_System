@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasTable('nasa_hazards')) {
+        if (! Schema::hasTable('nasa_hazards')) {
             Schema::create('nasa_hazards', function (Blueprint $table) {
                 $table->id();
                 $table->string('hazard_code', 10)->unique(); // 'R', 'I', 'D', 'G', 'E'
@@ -41,4 +41,3 @@ return new class extends Migration
         Schema::dropIfExists('nasa_hazards');
     }
 };
-
