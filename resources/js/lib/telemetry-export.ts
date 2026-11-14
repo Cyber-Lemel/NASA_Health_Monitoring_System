@@ -180,31 +180,52 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
     const currentDate = new Date().toUTCString();
 
     // 1. Header Banner (Deep Space NASA Theme)
-    doc.setFillColor(10, 25, 47); // Dark navy #0a192f
+    doc.setFillColor(5, 14, 26); // Deep Space Navy #050e1a
     doc.rect(0, 0, pageWidth, 28, 'F');
 
-    // Header Accent Line (Cyan)
+    // Header Accent Line (Electric Cyan)
     doc.setFillColor(92, 219, 223); // #5cdbdf
-    doc.rect(0, 27, pageWidth, 1.5, 'F');
+    doc.rect(0, 26.8, pageWidth, 1.2, 'F');
+
+    // Secondary Cobalt Line
+    doc.setFillColor(2, 132, 199); // #0284c7
+    doc.rect(0, 28, pageWidth, 0.4, 'F');
 
     // NASA Logo Badge
     doc.setFillColor(11, 61, 145); // NASA Blue #0b3d91
-    doc.roundedRect(12, 5, 20, 16, 2, 2, 'F');
+    doc.roundedRect(14, 5, 20, 16, 2, 2, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('NASA', 16, 15);
+    doc.setFontSize(10.5);
+    doc.text('NASA', 17.5, 15);
 
     // Title & Header Text
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
-    doc.text('ORBIT • ASTRONAUT HEALTH & TELEMETRY SYSTEM', 36, 11);
-    doc.setFontSize(8);
+    doc.setFontSize(11.5);
+    doc.text('ORBIT • ASTRONAUT HEALTH & TELEMETRY SYSTEM', 38, 11);
+    doc.setFontSize(7.5);
     doc.setTextColor(92, 219, 223);
-    doc.text('SPACE MEDICINE & LIFE SCIENCES DIVISION • JOHNSON SPACE CENTER', 36, 17);
-    doc.setTextColor(180, 200, 220);
+    doc.text('SPACE MEDICINE & LIFE SCIENCES DIVISION • JOHNSON SPACE CENTER', 38, 16.5);
+    doc.setTextColor(148, 163, 184);
     doc.setFont('helvetica', 'normal');
-    doc.text(`CONFIDENTIAL BIOMEDICAL DOSSIER // MET DATE: ${currentDate}`, 36, 22);
+    doc.setFontSize(6.8);
+    doc.text(`CONFIDENTIAL BIOMEDICAL DOSSIER // MET DATE: ${currentDate}`, 38, 21.5);
+
+    // Security Classification Badge (Right side)
+    doc.setFillColor(10, 28, 48);
+    doc.setDrawColor(92, 219, 223);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(pageWidth - 14 - 44, 5, 44, 15, 1.5, 1.5, 'FD');
+    doc.setFontSize(5.5);
+    doc.setTextColor(92, 219, 223);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SECURITY CLASSIFICATION', pageWidth - 14 - 42, 9.5);
+    doc.setFontSize(7);
+    doc.setTextColor(255, 255, 255);
+    doc.text('OFFICIAL MEDICAL', pageWidth - 14 - 42, 14);
+    doc.setFontSize(5);
+    doc.setTextColor(148, 163, 184);
+    doc.text('UNCLASSIFIED // NASA-STD-3001', pageWidth - 14 - 42, 17.5);
 
     let currentY = 36;
 
@@ -325,8 +346,8 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
         body: vitalsRows,
         theme: 'striped',
         headStyles: {
-            fillColor: [11, 61, 145], // NASA Blue
-            textColor: [255, 255, 255],
+            fillColor: [8, 24, 43], // Deep space navy
+            textColor: [92, 219, 223], // Electric cyan
             fontSize: 8.5,
             fontStyle: 'bold',
         },
@@ -418,8 +439,8 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
         body: hazardRows,
         theme: 'grid',
         headStyles: {
-            fillColor: [14, 116, 144], // Cyan/Teal
-            textColor: [255, 255, 255],
+            fillColor: [8, 24, 43],
+            textColor: [92, 219, 223],
             fontSize: 8.5,
             fontStyle: 'bold',
         },
@@ -466,8 +487,8 @@ export function exportAstronautToPdf(astronaut: AstronautFullData): void {
         body: countermeasureTableRows,
         theme: 'striped',
         headStyles: {
-            fillColor: [30, 41, 59],
-            textColor: [255, 255, 255],
+            fillColor: [8, 24, 43],
+            textColor: [92, 219, 223],
             fontSize: 8,
             fontStyle: 'bold',
         },

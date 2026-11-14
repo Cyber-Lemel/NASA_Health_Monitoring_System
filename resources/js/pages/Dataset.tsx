@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
@@ -676,80 +677,238 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
     };
 
     const exportDataToPdf = (items: DatasetRecordItem[], filename: string) => {
-    if (!items.length) {
-        toast.warning('No records to export');
-        return;
-    }
-
-    const doc = new jsPDF({ orientation: 'landscape' });
-    const cols = [
-        { h: 'ID', w: 18 },
-        { h: 'Name', w: 52 },
-        { h: 'Hazard', w: 52 },
-        { h: 'Risk', w: 24 },
-        { h: 'Days', w: 18 },
-        { h: 'BMD loss', w: 24 },
-        { h: 'Radiation', w: 28 },
-        { h: 'Agency', w: 61 },
-    ];
-    const left = 10;
-
-    // Shorten text so it fits its column
-    const fit = (text: string, w: number) => {
-        let t = text;
-        while (t.length > 1 && doc.getTextWidth(t) > w - 2) t = t.slice(0, -1);
-        return t === text ? text : `${t.slice(0, -1)}...`;
-    };
-
-    const drawHeader = (y: number) => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        let x = left;
-        cols.forEach((c) => {
-            doc.text(c.h, x, y);
-            x += c.w;
-        });
-        doc.line(left, y + 2, left + 277, y + 2);
-        doc.setFont('helvetica', 'normal');
-    };
-
-    doc.setFontSize(16);
-    doc.text('NASA HRP Astronaut Telemetry Dataset', left, 16);
-    doc.setFontSize(9);
-    doc.text(`Exported ${new Date().toLocaleString()} - ${items.length} records`, left, 22);
-
-    let y = 32;
-    drawHeader(y);
-    y += 8;
-
-    items.forEach((r) => {
-        if (y > 195) {
-            doc.addPage();
-            y = 16;
-            drawHeader(y);
-            y += 8;
+        if (!items.length) {
+            toast.warning('No records to export');
+            return;
         }
-        const row = [
-            `AST-${r.Astronaut ?? r.id ?? ''}`,
-            r.Name || '',
-            r.Hazard_Focus || '',
-            r.Risk_Level || 'Nominal',
-            String(r['Mission_duration(Days)'] ?? (r as any).duration ?? ''),
-            String(r.Bone_Density_Loss ?? ''),
-            r.Radiation_Exposure ? `${r.Radiation_Exposure} mSv` : '',
-            r.Country || '',
-        ];
-        doc.setFontSize(8);
-        let x = left;
-        row.forEach((cell, i) => {
-            doc.text(fit(cell, cols[i].w), x, y);
-            x += cols[i].w;
-        });
-        y += 6;
-    });
 
-    doc.save(filename);
-};
+        const doc = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: 'a4',
+        });
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 12;
+        const contentWidth = pageWidth - margin * 2;
+        const reportDate = new Date().toUTCString().slice(0, 25);
+        const docCode = `NASA-HRP-ARCHIVE-${Date.now().toString(36).toUpperCase()}`;
+
+        const drawDatasetHeader = (isFirstPage: boolean) => {
+            if (isFirstPage) {
+                // Deep Space NASA Banner
+                doc.setFillColor(5, 14, 26); // #050e1a
+                doc.rect(0, 0, pageWidth, 24, 'F');
+
+                // Electric Cyan Stripe
+                doc.setFillColor(92, 219, 223); // #5cdbdf
+                doc.rect(0, 22.8, pageWidth, 1.2, 'F');
+
+                // Secondary Cobalt Line
+                doc.setFillColor(2, 132, 199); // #0284c7
+                doc.rect(0, 24, pageWidth, 0.4, 'F');
+
+                // NASA Logo Badge
+                doc.setFillColor(11, 61, 145);
+                doc.roundedRect(margin, 4.5, 18, 15, 1.5, 1.5, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.text('NASA', margin + 3, 14);
+
+                // Title
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text('ORBIT • NASA HUMAN RESEARCH PROGRAM (HRP) TELEMETRY ARCHIVE', margin + 22, 10.5);
+
+                doc.setFontSize(7.2);
+                doc.setTextColor(92, 219, 223);
+                doc.text('5 HAZARDS OF HUMAN SPACEFLIGHT (R.I.D.G.E.) • JOHNSON SPACE CENTER', margin + 22, 15.5);
+
+                doc.setTextColor(148, 163, 184);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(6.5);
+                doc.text(`CONFIDENTIAL MEDICAL ARCHIVE // EXPORTED: ${reportDate} // RECORDS: ${items.length}`, margin + 22, 20);
+
+                // Right Classification Badge
+                doc.setFillColor(10, 28, 48);
+                doc.setDrawColor(92, 219, 223);
+                doc.setLineWidth(0.3);
+                doc.roundedRect(pageWidth - margin - 44, 4.5, 44, 15, 1.5, 1.5, 'FD');
+                doc.setFontSize(5.5);
+                doc.setTextColor(92, 219, 223);
+                doc.setFont('helvetica', 'bold');
+                doc.text('SECURITY CLASSIFICATION', pageWidth - margin - 42, 8.5);
+                doc.setFontSize(7);
+                doc.setTextColor(255, 255, 255);
+                doc.text('OFFICIAL HRP ARCHIVE', pageWidth - margin - 42, 13);
+                doc.setFontSize(5);
+                doc.setTextColor(148, 163, 184);
+                doc.text('UNCLASSIFIED // NASA-STD-3001', pageWidth - margin - 42, 16.5);
+            } else {
+                // Running header for subsequent pages
+                doc.setFillColor(5, 14, 26);
+                doc.rect(0, 0, pageWidth, 11, 'F');
+                doc.setFillColor(92, 219, 223);
+                doc.rect(0, 10.5, pageWidth, 0.5, 'F');
+
+                doc.setTextColor(255, 255, 255);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7.5);
+                doc.text('ORBIT • NASA HRP ASTRONAUT TELEMETRY ARCHIVE', margin, 7);
+
+                doc.setTextColor(92, 219, 223);
+                doc.setFontSize(6.8);
+                doc.text(`5 HAZARDS (R.I.D.G.E.) DATASET // REF: ${docCode}`, pageWidth / 2, 7, { align: 'center' });
+
+                doc.setTextColor(148, 163, 184);
+                doc.setFontSize(6);
+                doc.text('OFFICIAL FLIGHT DOSSIER', pageWidth - margin, 7, { align: 'right' });
+            }
+        };
+
+        // Draw initial page header
+        drawDatasetHeader(true);
+
+        let currentY = 29;
+
+        // Stat KPI cards
+        const validDays = items
+            .map((r) => Number(r['Mission_duration(Days)'] ?? (r as any).duration))
+            .filter((n) => !isNaN(n) && n > 0);
+        const avgDays = validDays.length ? Math.round(validDays.reduce((a, b) => a + b, 0) / validDays.length) : 180;
+
+        const validRad = items
+            .map((r) => Number(r.Radiation_Exposure))
+            .filter((n) => !isNaN(n) && n > 0);
+        const avgRad = validRad.length ? Math.round(validRad.reduce((a, b) => a + b, 0) / validRad.length) : 85;
+
+        const nominalCount = items.filter((r) => (r.Risk_Level || 'Nominal').toLowerCase().includes('nominal')).length;
+        const nominalPercent = Math.round((nominalCount / items.length) * 100);
+
+        const datasetStats = [
+            { label: 'COHORT RECORDS', value: String(items.length) },
+            { label: 'AVG FLIGHT DURATION', value: `${avgDays} Days` },
+            { label: 'AVG RADIATION EXPOSURE', value: `${avgRad} mSv` },
+            { label: 'NOMINAL RISK COMPLIANCE', value: `${nominalPercent}% (${nominalCount}/${items.length})` },
+        ];
+
+        const cardGap = 4;
+        const cardWidth = (contentWidth - (datasetStats.length - 1) * cardGap) / datasetStats.length;
+        const cardHeight = 14;
+
+        datasetStats.forEach((s, idx) => {
+            const cardX = margin + idx * (cardWidth + cardGap);
+            doc.setFillColor(248, 250, 252);
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(cardX, currentY, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+
+            doc.setFillColor(92, 219, 223);
+            doc.rect(cardX, currentY, cardWidth, 0.8, 'F');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.setTextColor(100, 116, 139);
+            doc.text(s.label, cardX + 3, currentY + 4.8);
+
+            doc.setFontSize(11);
+            doc.setTextColor(10, 25, 47);
+            doc.text(s.value, cardX + 3, currentY + 11);
+        });
+
+        currentY += cardHeight + 4.5;
+
+        const tableHeaders = [
+            'ID',
+            'Astronaut Name',
+            'Hazard Focus (R.I.D.G.E.)',
+            'Risk Level',
+            'Flight Days',
+            'Bone Loss',
+            'Radiation',
+            'Country / Agency',
+            'NASA Protocol',
+        ];
+
+        const tableRows = items.map((r) => [
+            String(r.Astronaut ?? r.id ?? ''),
+            r.Name || 'Specialist',
+            r.Hazard_Focus || 'Multi-Hazard Baseline',
+            r.Risk_Level || 'Nominal',
+            String(r['Mission_duration(Days)'] ?? (r as any).duration ?? '-'),
+            String(r.Bone_Density_Loss ?? '-'),
+            r.Radiation_Exposure ? `${r.Radiation_Exposure} mSv` : '-',
+            r.Country || 'USA / NASA',
+            r.NASA_HRP_Protocol || 'HRP-EXMC-STD',
+        ]);
+
+        autoTable(doc, {
+            startY: currentY,
+            head: [tableHeaders],
+            body: tableRows,
+            theme: 'striped',
+            headStyles: {
+                fillColor: [8, 24, 43], // Deep space navy
+                textColor: [92, 219, 223], // Electric cyan
+                fontSize: 7.2,
+                fontStyle: 'bold',
+                cellPadding: 2,
+            },
+            styles: {
+                fontSize: 6.8,
+                cellPadding: 1.8,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.15,
+                textColor: [30, 41, 59],
+            },
+            alternateRowStyles: {
+                fillColor: [248, 250, 252],
+            },
+            margin: { left: margin, right: margin, bottom: 18 },
+            didDrawPage: (data) => {
+                if (data.pageNumber > 1) {
+                    drawDatasetHeader(false);
+                }
+            },
+            didParseCell: (data) => {
+                if (data.section === 'body' && data.column.index === 3) {
+                    const raw = String(data.cell.raw ?? '').toLowerCase();
+                    if (raw.includes('nominal')) {
+                        data.cell.styles.textColor = [16, 185, 129];
+                        data.cell.styles.fontStyle = 'bold';
+                    } else if (raw.includes('guard') || raw.includes('mod')) {
+                        data.cell.styles.textColor = [217, 119, 6];
+                        data.cell.styles.fontStyle = 'bold';
+                    } else if (raw.includes('elevat') || raw.includes('crit') || raw.includes('high')) {
+                        data.cell.styles.textColor = [220, 38, 38];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
+            },
+        });
+
+        // Footers across all pages
+        const totalPages = (doc.internal as any).getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            const y = pageHeight - 6;
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.2);
+            doc.line(margin, y - 2.5, pageWidth - margin, y - 2.5);
+
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text('NASA HUMAN RESEARCH PROGRAM (HRP) • JOHNSON SPACE CENTER • BIO-OPERATIONS ARCHIVE', margin, y);
+            doc.text('CONFIDENTIAL MEDICAL DOSSIER • UNCLASSIFIED FOR MISSION OPERATIONS', pageWidth / 2, y, { align: 'center' });
+            doc.text(`PAGE ${i} OF ${totalPages}`, pageWidth - margin, y, { align: 'right' });
+        }
+
+        doc.save(filename);
+    };
 
 const exportAllPdf = () => {
     exportDataToPdf(localRecords, `NASA_HRP_5Hazards_Telemetry_${Date.now()}.pdf`);
