@@ -1,3 +1,4 @@
+import { jsPDF } from 'jspdf';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
@@ -41,6 +42,7 @@ import {
     Info,
     ShieldAlert,
     Layers,
+    FileText,
 } from 'lucide-react';
 import NasaLogo from '@/components/nasa-logo';
 import TelemetryImportModal from '@/components/telemetry-import-modal';
@@ -673,54 +675,130 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
         toast.success(`Exported ${selectedItems.length} selected records to JSON`);
     };
 
+    const exportDataToPdf = (items: DatasetRecordItem[], filename: string) => {
+    if (!items.length) {
+        toast.warning('No records to export');
+        return;
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const cols = [
+        { h: 'ID', w: 18 },
+        { h: 'Name', w: 52 },
+        { h: 'Hazard', w: 52 },
+        { h: 'Risk', w: 24 },
+        { h: 'Days', w: 18 },
+        { h: 'BMD loss', w: 24 },
+        { h: 'Radiation', w: 28 },
+        { h: 'Agency', w: 61 },
+    ];
+    const left = 10;
+
+    // Shorten text so it fits its column
+    const fit = (text: string, w: number) => {
+        let t = text;
+        while (t.length > 1 && doc.getTextWidth(t) > w - 2) t = t.slice(0, -1);
+        return t === text ? text : `${t.slice(0, -1)}...`;
+    };
+
+    const drawHeader = (y: number) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        let x = left;
+        cols.forEach((c) => {
+            doc.text(c.h, x, y);
+            x += c.w;
+        });
+        doc.line(left, y + 2, left + 277, y + 2);
+        doc.setFont('helvetica', 'normal');
+    };
+
+    doc.setFontSize(16);
+    doc.text('NASA HRP Astronaut Telemetry Dataset', left, 16);
+    doc.setFontSize(9);
+    doc.text(`Exported ${new Date().toLocaleString()} - ${items.length} records`, left, 22);
+
+    let y = 32;
+    drawHeader(y);
+    y += 8;
+
+    items.forEach((r) => {
+        if (y > 195) {
+            doc.addPage();
+            y = 16;
+            drawHeader(y);
+            y += 8;
+        }
+        const row = [
+            `AST-${r.Astronaut ?? r.id ?? ''}`,
+            r.Name || '',
+            r.Hazard_Focus || '',
+            r.Risk_Level || 'Nominal',
+            String(r['Mission_duration(Days)'] ?? (r as any).duration ?? ''),
+            String(r.Bone_Density_Loss ?? ''),
+            r.Radiation_Exposure ? `${r.Radiation_Exposure} mSv` : '',
+            r.Country || '',
+        ];
+        doc.setFontSize(8);
+        let x = left;
+        row.forEach((cell, i) => {
+            doc.text(fit(cell, cols[i].w), x, y);
+            x += cols[i].w;
+        });
+        y += 6;
+    });
+
+    doc.save(filename);
+};
+
+const exportAllPdf = () => {
+    exportDataToPdf(localRecords, `NASA_HRP_5Hazards_Telemetry_${Date.now()}.pdf`);
+    toast.success(`Exported ${localRecords.length} records to PDF`);
+};
+
+const exportSelectedPdf = () => {
+    const selectedItems = localRecords.filter((r) => selectedIds.includes(r.Astronaut ?? r.id ?? ''));
+    exportDataToPdf(selectedItems, `NASA_HRP_Selected_${selectedItems.length}_Crew_${Date.now()}.pdf`);
+    toast.success(`Exported ${selectedItems.length} selected records to PDF`);
+};
+
+    
+
     // Helper for BMD badge
     const getBoneLossBadge = (lossVal?: string | number) => {
-        if (lossVal === undefined || lossVal === null || lossVal === '') {
-            return { text: 'N/A', color: 'text-slate-400 bg-[#0a1f2e] border-[#1a4b6c]' };
-        }
-        const str = String(lossVal);
-        const num = parseFloat(str.replace('%', ''));
-        const display = str.includes('%') ? str : `${num}%`;
+    if (lossVal === undefined || lossVal === null || lossVal === '') {
+        return { text: 'N/A', color: 'text-slate-400 bg-slate-800/50 border-slate-700' };
+    }
+    const str = String(lossVal);
+    const num = parseFloat(str.replace('%', ''));
+    const display = str.includes('%') ? str : `${num}%`;
+    if (num <= -4.0) return { text: display, color: 'text-red-300 bg-red-500/10 border-red-500/30' };
+    if (num <= -2.5) return { text: display, color: 'text-amber-300 bg-amber-400/10 border-amber-400/30' };
+    return { text: display, color: 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30' };
+};
 
-        if (num <= -4.0) {
-            return { text: display, color: 'text-rose-400 bg-rose-950/40 border-rose-800/80 shadow-[0_0_8px_rgba(244,63,94,0.25)]' };
-        }
-        if (num <= -2.5) {
-            return { text: display, color: 'text-amber-400 bg-amber-950/40 border-amber-800/80' };
-        }
-        return { text: display, color: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/80' };
-    };
+const HAZARD_STYLES: Record<string, { text: string; color: string }> = {
+    R: { text: 'Radiation', color: 'text-red-300 bg-red-500/10 border-red-500/30' },
+    I: { text: 'Isolation', color: 'text-purple-300 bg-purple-400/10 border-purple-400/30' },
+    D: { text: 'Distance', color: 'text-amber-300 bg-amber-400/10 border-amber-400/30' },
+    G: { text: 'Gravity', color: 'text-sky-300 bg-sky-400/10 border-sky-400/30' },
+    E: { text: 'Closed env.', color: 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30' },
+};
 
-    // Helper for Hazard badge color
-    const getHazardBadge = (hazardFocus?: string) => {
-        if (!hazardFocus) return { text: 'Gravity Fields (G)', code: 'G', color: 'text-sky-400 bg-sky-950/40 border-sky-800/80' };
-        const h = hazardFocus.toUpperCase();
-        if (h.includes('RADIATION') || h.includes('R')) {
-            return { text: 'Radiation (R)', code: 'R', color: 'text-rose-400 bg-rose-950/50 border-rose-700/80' };
-        }
-        if (h.includes('ISOLATION') || h.includes('I')) {
-            return { text: 'Isolation (I)', code: 'I', color: 'text-purple-400 bg-purple-950/50 border-purple-700/80' };
-        }
-        if (h.includes('DISTANCE') || h.includes('D')) {
-            return { text: 'Distance (D)', code: 'D', color: 'text-amber-400 bg-amber-950/50 border-amber-700/80' };
-        }
-        if (h.includes('ENVIRONMENT') || h.includes('E')) {
-            return { text: 'Closed Env (E)', code: 'E', color: 'text-emerald-400 bg-emerald-950/50 border-emerald-700/80' };
-        }
-        return { text: 'Gravity (G)', code: 'G', color: 'text-cyan-400 bg-cyan-950/50 border-cyan-700/80' };
-    };
+const getHazardBadge = (hazardFocus?: string) => {
+    const h = (hazardFocus || 'Gravity Fields (G)').toUpperCase();
+    const code =
+        h.match(/\(([RIDGE])\)/)?.[1] ??
+        (h.includes('RADIATION') ? 'R' : h.includes('ISOLATION') ? 'I' : h.includes('DISTANCE') ? 'D' : h.includes('ENVIRONMENT') ? 'E' : 'G');
+    return { code, ...HAZARD_STYLES[code] };
+};
 
-    // Helper for Risk Level badge
-    const getRiskLevelBadge = (level?: string) => {
-        const lvl = (level || 'Nominal').toUpperCase();
-        if (lvl === 'ELEVATED' || lvl === 'HIGH' || lvl === 'CRITICAL') {
-            return 'text-rose-400 bg-rose-950/40 border-rose-800/80 shadow-[0_0_8px_rgba(244,63,94,0.2)]';
-        }
-        if (lvl === 'GUARDED' || lvl === 'MODERATE' || lvl === 'WARNING') {
-            return 'text-amber-400 bg-amber-950/40 border-amber-800/80';
-        }
-        return 'text-emerald-400 bg-emerald-950/40 border-emerald-800/80';
-    };
+const getRiskLevelBadge = (level?: string) => {
+    const lvl = (level || 'Nominal').toUpperCase();
+    if (['ELEVATED', 'HIGH', 'CRITICAL'].includes(lvl)) return 'text-red-300 bg-red-500/10 border-red-500/30';
+    if (['GUARDED', 'MODERATE', 'WARNING'].includes(lvl)) return 'text-amber-300 bg-amber-400/10 border-amber-400/30';
+    return 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30';
+};
 
     // API: Manual Add Astronaut
     const handleManualAddSubmit = async (e: React.FormEvent) => {
@@ -956,254 +1034,228 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
 
     const hasActiveFilters = searchQuery !== '' || selectedGender !== 'all' || selectedCountry !== 'all' || selectedHazardFilter !== 'all';
 
-    return (
+        const card = 'rounded-2xl border border-slate-800 bg-[#0b1626]';
+    const inputCls = 'w-full rounded-xl border border-slate-700 bg-[#0a1220] px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400';
+    const labelCls = 'mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400';
+    const btn = 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50';
+    const btnPrimary = 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50';
+    const btnDanger = 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50';
+    const selectCls = 'cursor-pointer rounded-xl border border-slate-700 bg-[#0a1220] px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-cyan-400';
+    const badge = 'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold';
+    const iconBtn = 'cursor-pointer rounded-lg border border-slate-700 bg-slate-800/50 p-2 transition hover:bg-slate-800';
+
+    const th = (label: string, field?: string) => (
+        <th
+            className={`px-4 py-3 font-semibold ${field ? 'cursor-pointer select-none hover:text-cyan-300' : ''}`}
+            onClick={field ? () => handleSort(field) : undefined}
+        >
+            <span className="inline-flex items-center gap-1.5">
+                {label}
+                {field && <ArrowUpDown size={12} className={sortField === field ? 'text-cyan-300' : 'text-slate-600'} />}
+            </span>
+        </th>
+    );
+
+    const stat = (label: string, value: React.ReactNode, sub: React.ReactNode, icon: React.ReactNode) => (
+        <div className={`${card} p-5`}>
+            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <span>{label}</span>
+                {icon}
+            </div>
+            <div className="mt-2 text-2xl font-bold">{value}</div>
+            <p className="mt-1 text-xs text-slate-500">{sub}</p>
+        </div>
+    );
+
+    // Shared form for Add and Edit
+    const recordFields = (form: any, setForm: (f: any) => void, withId: boolean) => {
+        const set = (k: string, v: any) => setForm({ ...form, [k]: v });
+        return (
+            <div className="grid gap-4 sm:grid-cols-2">
+                {withId && (
+                    <div>
+                        <label className={labelCls}>Astronaut ID (blank = auto)</label>
+                        <input className={inputCls} value={form.Astronaut} onChange={(e) => set('Astronaut', e.target.value)} placeholder="e.g. 13" />
+                    </div>
+                )}
+                <div>
+                    <label className={labelCls}>Crew member name *</label>
+                    <input required className={inputCls} value={form.Name} onChange={(e) => set('Name', e.target.value)} placeholder="e.g. CDR. Sarah Connor" />
+                </div>
+                <div>
+                    <label className={labelCls}>Primary hazard</label>
+                    <select className={inputCls} value={form.Hazard_Focus} onChange={(e) => set('Hazard_Focus', e.target.value)}>
+                        <option value="Space Radiation (R)">R - Space Radiation</option>
+                        <option value="Isolation and Confinement (I)">I - Isolation and Confinement</option>
+                        <option value="Distance from Earth (D)">D - Distance from Earth</option>
+                        <option value="Gravity Fields (G)">G - Gravity Fields</option>
+                        <option value="Hostile and Closed Environments (E)">E - Hostile and Closed Environments</option>
+                    </select>
+                </div>
+                <div>
+                    <label className={labelCls}>Risk level</label>
+                    <select className={inputCls} value={form.Risk_Level} onChange={(e) => set('Risk_Level', e.target.value)}>
+                        {['Nominal', 'Guarded', 'Elevated', 'Critical'].map((l) => (
+                            <option key={l}>{l}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className={labelCls}>Launch age</label>
+                    <input type="number" className={inputCls} value={form.Age_at_mission_start} onChange={(e) => set('Age_at_mission_start', parseInt(e.target.value) || 40)} />
+                </div>
+                <div>
+                    <label className={labelCls}>Gender</label>
+                    <select className={inputCls} value={form.Gender} onChange={(e) => set('Gender', e.target.value)}>
+                        {['Male', 'Female', 'Other'].map((g) => (
+                            <option key={g}>{g}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className={labelCls}>Agency / country</label>
+                    <input className={inputCls} value={form.Country} onChange={(e) => set('Country', e.target.value)} />
+                </div>
+                <div>
+                    <label className={labelCls}>Mission duration (days)</label>
+                    <input type="number" className={inputCls} value={form['Mission_duration(Days)']} onChange={(e) => set('Mission_duration(Days)', parseInt(e.target.value) || 180)} />
+                </div>
+                <div>
+                    <label className={labelCls}>Bone density loss</label>
+                    <input className={inputCls} value={form.Bone_Density_Loss} onChange={(e) => set('Bone_Density_Loss', e.target.value)} />
+                </div>
+                <div>
+                    <label className={labelCls}>Radiation exposure (mSv)</label>
+                    <input type="number" className={inputCls} value={form.Radiation_Exposure} onChange={(e) => set('Radiation_Exposure', parseInt(e.target.value) || 95)} />
+                </div>
+                <div className="sm:col-span-2">
+                    <label className={labelCls}>Countermeasures protocol</label>
+                    <input className={inputCls} value={form.Countermeasures_Used} onChange={(e) => set('Countermeasures_Used', e.target.value)} />
+                </div>
+            </div>
+        );
+    };
+       return (
         <>
-            <Head title="ORBIT • 5 Hazards of Human Spaceflight & Telemetry Archive">
+            <Head title="ORBIT • 5 Hazards of Human Spaceflight">
                 <link rel="icon" href="/favicon.svg?v=nasa" type="image/svg+xml" />
             </Head>
 
-            {/* ORBIT HUD Main Container */}
-            <div className="min-h-screen bg-[#030b14] text-[#5cdbdf] font-mono selection:bg-[#0284c7] selection:text-white p-3 sm:p-6 relative select-none overflow-x-hidden">
-                {/* Background Tech Gradients */}
-                <div className="fixed inset-0 pointer-events-none z-0">
-                    <div className="absolute top-0 right-1/4 w-[600px] h-[600px] bg-[#0b3d91]/15 rounded-full blur-[160px]" />
-                    <div className="absolute top-1/3 left-1/4 w-[500px] h-[500px] bg-[#0284c7]/10 rounded-full blur-[170px]" />
-                    <div className="absolute bottom-0 right-10 w-[400px] h-[400px] bg-[#5cdbdf]/5 rounded-full blur-[140px]" />
-                    <div
-                        className="absolute inset-0 opacity-[0.035]"
-                        style={{
-                            backgroundImage:
-                                'linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)',
-                            backgroundSize: '40px 40px',
-                        }}
-                    />
-                </div>
-
-                <div className="relative z-10 max-w-[1700px] mx-auto space-y-5">
-                    {/* Top Bar: ORBIT Mission Control Header */}
-                    <header className="border border-[#1a4b6c] bg-[#06121e]/90 p-4 relative backdrop-blur-md">
-                        <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-                            {/* Brand Identity */}
-                            <div className="flex items-center gap-3 sm:gap-4">
-                                <div className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] shadow-[0_0_12px_rgba(92,219,223,0.15)] flex-shrink-0">
-                                    <NasaLogo size={36} />
-                                </div>
-                                <div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h1 className="text-base sm:text-xl font-bold tracking-wider text-white">
-                                            ORBIT <span className="text-[#5cdbdf]">// 5 HAZARDS OF HUMAN SPACEFLIGHT</span>
-                                        </h1>
-                                        <span className="px-2 py-0.5 text-[10px] tracking-widest border border-cyan-800/80 bg-cyan-950/60 text-cyan-300">
-                                            SQLITE DATABASE: <code className="text-[#5cdbdf]">nasa_hazards & dataset_records</code>
-                                        </span>
-                                    </div>
-                                    <p className="text-[11px] text-slate-400 tracking-wider mt-0.5 flex flex-wrap items-center gap-2">
-                                        <span>NASA HUMAN RESEARCH PROGRAM (HRP)</span>
-                                        <span className="text-slate-600">•</span>
-                                        <span>RIDGE FRAMEWORK</span>
-                                        <span className="text-slate-600">•</span>
-                                        <a
-                                            href="https://www.nasa.gov/hrp/hazards/"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-cyan-400 hover:text-white underline inline-flex items-center gap-1"
-                                        >
-                                            <span>NASA.GOV/HRP/HAZARDS</span>
-                                            <ExternalLink className="w-3 h-3" />
-                                        </a>
-                                    </p>
-                                </div>
+            <div className="min-h-screen bg-[#060d18] p-4 text-white sm:p-8">
+                <div className="mx-auto max-w-[1600px] space-y-6">
+                    {/* Header */}
+                    <header className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="rounded-xl border border-slate-800 bg-[#0b1626] p-2">
+                                <NasaLogo size={36} />
                             </div>
-
-                            {/* Middle Status Indicators */}
-                            <div className="hidden xl:flex items-center gap-5 text-[11px] border-x border-[#1a4b6c]/60 px-5">
-                                <div className="flex items-center gap-2">
-                                    <Clock className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                    <span className="text-slate-400">TIME:</span>
-                                    <span className="text-white font-bold tracking-widest">{utcTimeStr}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                                    <span className="text-slate-400">DSN:</span>
-                                    <span className="text-emerald-400 font-bold">LOCKED // 40-MS</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                    <span className="text-slate-400">STANDARD:</span>
-                                    <span className="text-cyan-300 font-bold">NASA-STD-3001</span>
-                                </div>
-                            </div>
-
-                            {/* Action Buttons: Manual Add, Scan Import, Mission HUD, Exports */}
-                            <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsManualAddOpen(true)}
-                                    className="border border-[#5cdbdf] bg-[#5cdbdf]/15 text-[#5cdbdf] hover:bg-[#5cdbdf] hover:text-[#030b14] px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(92,219,223,0.2)]"
-                                >
-                                    <UserPlus className="w-3.5 h-3.5" />
-                                    <span>ADD CREW RECORD</span>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsImportModalOpen(true)}
-                                    className="border border-emerald-500/80 bg-emerald-950/40 text-emerald-400 hover:bg-emerald-600 hover:text-white px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-                                >
-                                    <Upload className="w-3.5 h-3.5" />
-                                    <span>IMPORT DATA</span>
-                                </button>
-
-                                <Link
-                                    href="/"
-                                    className="border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] px-3.5 py-2 text-xs tracking-widest uppercase hover:bg-[#0b3d91]/30 hover:border-[#5cdbdf] hover:text-white transition-all flex items-center gap-1.5 font-bold shadow-[0_0_10px_rgba(92,219,223,0.1)]"
-                                >
-                                    <ArrowLeft className="w-3.5 h-3.5" />
-                                    <span>MISSION HUD</span>
-                                </Link>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setHealthRiskAstronaut(null);
-                                        setIsHealthRiskOpen(true);
-                                    }}
-                                    className="border border-amber-500/80 bg-amber-950/40 text-amber-300 hover:bg-amber-600 hover:text-white px-3.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                                    title="Open ORBIT Astronaut Health Risk & Microgravity Pathophysiology Engine"
-                                >
-                                    <Activity className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>RISK ANALYZER</span>
-                                </button>
-
-                                <button
-                                    onClick={exportAllCsv}
-                                    type="button"
-                                    className="border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] px-2.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1 cursor-pointer"
-                                    title="Export all cohort records to CSV"
-                                >
-                                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>CSV</span>
-                                </button>
-
-                                <button
-                                    onClick={exportAllJson}
-                                    type="button"
-                                    className="border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] px-2.5 py-2 text-xs tracking-wider uppercase transition-all flex items-center gap-1 cursor-pointer"
-                                    title="Export all cohort records to JSON"
-                                >
-                                    <FileCode className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>JSON</span>
-                                </button>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* SECTION: NASA 5 HAZARDS OF HUMAN SPACEFLIGHT (RIDGE) INTERACTIVE MATRIX */}
-                    <section className="border border-[#1a4b6c] bg-[#06121e]/90 p-4 sm:p-5 relative backdrop-blur-md">
-                        <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-4 border-b border-[#1a4b6c]/50 pb-3">
                             <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 text-xs font-bold bg-[#5cdbdf] text-slate-950 tracking-wider">
-                                        NASA HRP RIDGE FRAMEWORK
-                                    </span>
-                                    <h2 className="text-sm sm:text-base font-bold text-white tracking-wider">
-                                        THE 5 HAZARDS OF HUMAN SPACEFLIGHT
-                                    </h2>
-                                </div>
-                                <p className="text-[11px] text-slate-400 mt-1">
-                                    Official environmental stressors defined by the NASA Human Research Program. Click any card to inspect risks, metrics, and deployed countermeasures.
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                                    NASA Human Research Program
                                 </p>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-xs">
+                                <h1 className="text-2xl font-bold">5 Hazards of Human Spaceflight</h1>
                                 <a
                                     href="https://www.nasa.gov/hrp/hazards/"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all flex items-center gap-1.5 text-[11px]"
+                                    className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-300"
                                 >
-                                    <span>NASA HRP HAZARDS PORTAL</span>
-                                    <ExternalLink className="w-3 h-3" />
+                                    nasa.gov/hrp/hazards <ExternalLink size={12} />
                                 </a>
                             </div>
                         </div>
 
-                        {/* 5 Hazard Cards Grid (R-I-D-G-E) */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="mr-2 hidden items-center gap-2 text-xs text-slate-500 lg:flex">
+                                <Clock size={14} /> {utcTimeStr}
+                                <Radio size={14} className="ml-2 text-emerald-400" /> DSN locked
+                            </span>
+                            <button type="button" onClick={() => setIsManualAddOpen(true)} className={btnPrimary}>
+                                <UserPlus size={16} /> Add crew record
+                            </button>
+                            <button type="button" onClick={() => setIsImportModalOpen(true)} className={btn}>
+                                <Upload size={16} /> Import data
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setHealthRiskAstronaut(null);
+                                    setIsHealthRiskOpen(true);
+                                }}
+                                className={btn}
+                            >
+                                <Activity size={16} className="text-amber-400" /> Risk analyzer
+                            </button>
+                            <button type="button" onClick={exportAllCsv} className={btn} title="Export all to CSV">
+                                <FileSpreadsheet size={16} className="text-emerald-400" /> CSV
+                            </button>
+                            <button type="button" onClick={exportAllPdf} className={btn} title="Export all to PDF">
+                                <FileText size={16} className="text-red-400" /> PDF
+                            </button>
+                            <button type="button" onClick={exportAllJson} className={btn} title="Export all to JSON">
+                                <FileCode size={16} className="text-amber-400" /> JSON
+                            </button>
+                            <Link href="/" className={btn}>
+                                <ArrowLeft size={16} /> Mission hub
+                            </Link>
+                        </div>
+                    </header>
+
+                    {/* Hazards */}
+                    <section className={`${card} p-6`}>
+                        <h2 className="font-bold">The 5 Hazards of Human Spaceflight</h2>
+                        <p className="text-sm text-slate-400">
+                            Click a card to see risks, metrics and countermeasures. Use "Filter crew" to narrow the table.
+                        </p>
+
+                        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                             {activeHazards.map((hazard) => {
-                                const isFilterActive = selectedHazardFilter.toLowerCase() === hazard.hazard_code.toLowerCase();
+                                const active = selectedHazardFilter.toLowerCase() === hazard.hazard_code.toLowerCase();
                                 return (
                                     <div
                                         key={hazard.hazard_code}
                                         onClick={() => setSelectedHazardModal(hazard)}
-                                        className={`group relative p-4 border transition-all cursor-pointer flex flex-col justify-between ${
-                                            isFilterActive
-                                                ? 'border-[#5cdbdf] bg-[#0b3d91]/30 shadow-[0_0_15px_rgba(92,219,223,0.3)]'
-                                                : 'border-[#1a4b6c] bg-[#0a1f2e]/70 hover:border-[#5cdbdf] hover:bg-[#0a1f2e]'
+                                        className={`flex cursor-pointer flex-col justify-between rounded-xl border bg-[#0a1220] p-4 transition ${
+                                            active ? 'border-cyan-400/70' : 'border-slate-800 hover:border-slate-600'
                                         }`}
                                     >
                                         <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-7 h-7 flex items-center justify-center font-bold text-sm bg-[#030b14] border border-[#1a4b6c] text-[#5cdbdf] group-hover:border-[#5cdbdf] group-hover:text-white transition-colors">
-                                                        {hazard.hazard_code}
-                                                    </span>
-                                                    <span className="text-[10px] text-slate-400 tracking-wider">
-                                                        {hazard.hazard_id}
-                                                    </span>
-                                                </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-400/10 text-sm font-bold text-cyan-300">
+                                                    {hazard.hazard_code}
+                                                </span>
                                                 <span
-                                                    className={`text-[9px] font-bold px-1.5 py-0.5 border ${
+                                                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
                                                         hazard.severity_level === 'CRITICAL'
-                                                            ? 'border-rose-700 bg-rose-950/60 text-rose-300'
-                                                            : 'border-amber-700 bg-amber-950/60 text-amber-300'
+                                                            ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                                                            : 'border-amber-400/30 bg-amber-400/10 text-amber-300'
                                                     }`}
                                                 >
                                                     {hazard.severity_level}
                                                 </span>
                                             </div>
-
-                                            <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-[#5cdbdf] transition-colors leading-snug">
-                                                {hazard.title}
-                                            </h3>
-
-                                            <p className="text-[10px] text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                            <h3 className="mt-3 text-sm font-bold">{hazard.title}</h3>
+                                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">
                                                 {hazard.tagline || hazard.description}
                                             </p>
                                         </div>
-
-                                        <div className="mt-4 pt-3 border-t border-[#1a4b6c]/50 flex items-center justify-between text-[10px]">
-                                            <span className="text-[#5cdbdf] flex items-center gap-1 group-hover:underline">
-                                                <span>DETAILS</span>
-                                                <ChevronRight className="w-3 h-3" />
+                                        <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-3 text-xs">
+                                            <span className="flex items-center gap-1 text-cyan-300">
+                                                Details <ChevronRight size={14} />
                                             </span>
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setSelectedHazardFilter(
-                                                        selectedHazardFilter.toLowerCase() === hazard.hazard_code.toLowerCase()
-                                                            ? 'all'
-                                                            : hazard.hazard_code
-                                                    );
+                                                    setSelectedHazardFilter(active ? 'all' : hazard.hazard_code);
                                                 }}
-                                                className={`px-1.5 py-0.5 border text-[9px] transition-colors ${
-                                                    isFilterActive
-                                                        ? 'border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold'
-                                                        : 'border-[#1a4b6c] text-slate-400 hover:text-white'
+                                                className={`cursor-pointer rounded-lg border px-2.5 py-1 font-semibold ${
+                                                    active
+                                                        ? 'border-cyan-400 bg-cyan-400 text-slate-900'
+                                                        : 'border-slate-700 text-slate-400 hover:text-white'
                                                 }`}
                                             >
-                                                {isFilterActive ? 'FILTERED' : 'FILTER CREW'}
+                                                {active ? 'Filtered' : 'Filter crew'}
                                             </button>
                                         </div>
                                     </div>
@@ -1212,489 +1264,274 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                         </div>
                     </section>
 
-                    {/* Stat Metrics Strip */}
-                    <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>COHORT SIZE</span>
-                                <User className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                            </div>
-                            <div className="text-2xl font-bold text-white mt-1.5 tracking-tight">
-                                {metrics.totalCount}
-                            </div>
-                            <div className="text-[10px] text-[#5cdbdf] mt-1 flex items-center gap-1">
-                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#5cdbdf] animate-ping" />
-                                NASA Astronaut Records
-                            </div>
-                        </div>
-
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>MEAN FLIGHT</span>
-                                <Clock className="w-3.5 h-3.5 text-sky-400" />
-                            </div>
-                            <div className="text-2xl font-bold text-white mt-1.5 tracking-tight">
-                                {metrics.avgDuration} <span className="text-xs text-sky-400 font-normal">DAYS</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1">
-                                Max Flight: <strong className="text-white">{metrics.maxDuration}d</strong>
-                            </div>
-                        </div>
-
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>MEAN BMD LOSS (G)</span>
-                                <Bone className="w-3.5 h-3.5 text-rose-400" />
-                            </div>
-                            <div className="text-2xl font-bold text-rose-400 mt-1.5 tracking-tight">
-                                {metrics.avgBoneLoss}%
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1">
-                                Microgravity Demineralization
-                            </div>
-                        </div>
-
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>MEAN DOSIMETRY (R)</span>
-                                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                            </div>
-                            <div className="text-2xl font-bold text-amber-300 mt-1.5 tracking-tight">
-                                {metrics.avgRadiation} <span className="text-xs text-amber-400 font-normal">mSv</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1">
-                                Cosmic & Solar Absorption
-                            </div>
-                        </div>
-
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>AGENCIES / NATIONS</span>
-                                <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                            </div>
-                            <div className="text-2xl font-bold text-white mt-1.5 tracking-tight">
-                                {metrics.distinctCountries}
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1">
-                                International HRP Partners
-                            </div>
-                        </div>
-
-                        <div className="border border-[#1a4b6c] bg-[#06121e]/80 p-3.5 relative">
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 tracking-wider">
-                                <span>SELECTED DATA</span>
-                                <CheckSquare className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                            </div>
-                            <div className="text-2xl font-bold text-[#5cdbdf] mt-1.5 tracking-wider">
-                                {selectedIds.length} <span className="text-xs text-slate-400 font-normal">ROWS</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1">
-                                Ready for Bulk Ops
-                            </div>
-                        </div>
+                    {/* Stats */}
+                    <section className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                        {stat('Cohort size', metrics.totalCount, 'Astronaut records', <User size={16} className="text-cyan-300" />)}
+                        {stat(
+                            'Mean flight',
+                            <>
+                                {metrics.avgDuration} <span className="text-xs font-normal text-slate-500">days</span>
+                            </>,
+                            `Max flight: ${metrics.maxDuration}d`,
+                            <Clock size={16} className="text-sky-400" />,
+                        )}
+                        {stat(
+                            'Mean BMD loss',
+                            <span className="text-red-400">{metrics.avgBoneLoss}%</span>,
+                            'Demineralization',
+                            <Bone size={16} className="text-red-400" />,
+                        )}
+                        {stat(
+                            'Mean dosimetry',
+                            <span className="text-amber-300">
+                                {metrics.avgRadiation} <span className="text-xs font-normal text-slate-500">mSv</span>
+                            </span>,
+                            'Cosmic and solar absorption',
+                            <Zap size={16} className="text-amber-400" />,
+                        )}
+                        {stat('Agencies', metrics.distinctCountries, 'International partners', <Globe size={16} className="text-emerald-400" />)}
+                        {stat(
+                            'Selected',
+                            <span className="text-cyan-300">
+                                {selectedIds.length} <span className="text-xs font-normal text-slate-500">rows</span>
+                            </span>,
+                            'Ready for bulk actions',
+                            <CheckSquare size={16} className="text-cyan-300" />,
+                        )}
                     </section>
 
-                    {/* Bulk Selection Action Bar */}
+                    {/* Bulk bar */}
                     {selectedIds.length > 0 && (
-                        <div className="border-2 border-[#5cdbdf] bg-[#0a1f2e] p-3.5 shadow-[0_0_20px_rgba(92,219,223,0.3)] flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
-                            <div className="flex items-center gap-3">
-                                <span className="px-2.5 py-1 bg-[#5cdbdf] text-[#030b14] font-bold text-xs uppercase tracking-wider">
-                                    {selectedIds.length} RECORD{selectedIds.length > 1 ? 'S' : ''} SELECTED
-                                </span>
-                                <span className="text-xs text-slate-300">
-                                    Perform bulk operations on chosen astronaut records
-                                </span>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <button
-                                    type="button"
-                                    onClick={exportSelectedCsv}
-                                    className="flex items-center gap-1.5 border border-emerald-500 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/80 px-3 py-1.5 text-xs transition-colors cursor-pointer"
-                                >
-                                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>EXPORT SELECTED (CSV)</span>
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-400/40 bg-cyan-400/5 p-4">
+                            <p className="text-sm">
+                                <span className="font-bold text-cyan-300">{selectedIds.length}</span> record
+                                {selectedIds.length > 1 ? 's' : ''} selected
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={exportSelectedCsv} className={btn}>
+                                    <FileSpreadsheet size={16} className="text-emerald-400" /> Export CSV
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={exportSelectedJson}
-                                    className="flex items-center gap-1.5 border border-amber-500 bg-amber-950/60 text-amber-300 hover:bg-amber-900/80 px-3 py-1.5 text-xs transition-colors cursor-pointer"
-                                >
-                                    <FileCode className="w-3.5 h-3.5 text-amber-400" />
-                                    <span>EXPORT SELECTED (JSON)</span>
+                                <button type="button" onClick={exportSelectedJson} className={btn}>
+                                    <FileCode size={16} className="text-amber-400" /> Export JSON
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsBulkDeleteConfirmOpen(true)}
-                                    className="flex items-center gap-1.5 border border-red-500 bg-red-950/80 text-red-300 hover:bg-red-600 hover:text-white px-3 py-1.5 text-xs transition-colors cursor-pointer font-bold shadow-[0_0_10px_rgba(239,68,68,0.3)]"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>BULK DELETE ({selectedIds.length})</span>
+                                <button type="button" onClick={exportSelectedPdf} className={btn}>
+                                    <FileText size={16} className="text-red-400" /> Export PDF
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedIds([])}
-                                    className="flex items-center gap-1 border border-slate-700 bg-slate-900 text-slate-400 hover:text-white px-2.5 py-1.5 text-xs transition-colors cursor-pointer"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>CLEAR</span>
+                                <button type="button" onClick={() => setIsBulkDeleteConfirmOpen(true)} className={btnDanger}>
+                                    <Trash2 size={16} /> Delete ({selectedIds.length})
+                                </button>
+                                <button type="button" onClick={() => setSelectedIds([])} className={btn}>
+                                    <X size={16} /> Clear
                                 </button>
                             </div>
                         </div>
                     )}
 
-                    {/* Filter and Query Command Bar */}
-                    <div className="border border-[#1a4b6c] bg-[#06121e]/90 p-3.5 backdrop-blur-md flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 text-xs">
-                        {/* Search Input */}
-                        <div className="relative flex-1 max-w-lg">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="SEARCH ASTRONAUT, HAZARD, CALLSIGN, AGENCY..."
-                                className="w-full pl-9 pr-8 py-2 bg-[#030b14] border border-[#1a4b6c] text-[#5cdbdf] placeholder:text-slate-600 focus:outline-none focus:border-[#5cdbdf] transition-all text-xs tracking-wider"
-                            />
-                            {searchQuery && (
-                                <button
-                                    onClick={() => setSearchQuery('')}
-                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Filter Dropdowns */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            {/* Hazard Filter */}
-                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
-                                <Shield className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                <select
-                                    value={selectedHazardFilter}
-                                    onChange={(e) => setSelectedHazardFilter(e.target.value)}
-                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer uppercase text-xs"
-                                >
-                                    <option value="all" className="bg-[#030b14] text-slate-200">
-                                        ALL 5 HAZARDS
-                                    </option>
-                                    <option value="R" className="bg-[#030b14] text-rose-300">
-                                        R - SPACE RADIATION
-                                    </option>
-                                    <option value="I" className="bg-[#030b14] text-purple-300">
-                                        I - ISOLATION & CONFINEMENT
-                                    </option>
-                                    <option value="D" className="bg-[#030b14] text-amber-300">
-                                        D - DISTANCE FROM EARTH
-                                    </option>
-                                    <option value="G" className="bg-[#030b14] text-sky-300">
-                                        G - GRAVITY FIELDS
-                                    </option>
-                                    <option value="E" className="bg-[#030b14] text-emerald-300">
-                                        E - HOSTILE CLOSED ENV
-                                    </option>
-                                </select>
+                    {/* Table card */}
+                    <section className={`${card} p-6`}>
+                        {/* Filters */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative min-w-[240px] flex-1">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                <input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search astronaut, hazard, callsign, agency..."
+                                    className={`${inputCls} pl-9 pr-9`}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 hover:text-white"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Gender Filter */}
-                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
-                                <User className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                <select
-                                    value={selectedGender}
-                                    onChange={(e) => setSelectedGender(e.target.value)}
-                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer uppercase text-xs"
-                                >
-                                    <option value="all" className="bg-[#030b14] text-slate-200">
-                                        GENDER: ALL
-                                    </option>
-                                    <option value="male" className="bg-[#030b14] text-slate-200">
-                                        MALE
-                                    </option>
-                                    <option value="female" className="bg-[#030b14] text-slate-200">
-                                        FEMALE
-                                    </option>
-                                </select>
-                            </div>
+                            <select value={selectedHazardFilter} onChange={(e) => setSelectedHazardFilter(e.target.value)} className={selectCls}>
+                                <option value="all">All 5 hazards</option>
+                                <option value="R">R - Space Radiation</option>
+                                <option value="I">I - Isolation and Confinement</option>
+                                <option value="D">D - Distance from Earth</option>
+                                <option value="G">G - Gravity Fields</option>
+                                <option value="E">E - Hostile and Closed Env.</option>
+                            </select>
 
-                            {/* Country / Agency Filter */}
-                            <div className="flex items-center gap-1 border border-[#1a4b6c] bg-[#030b14] px-2 py-1">
-                                <Globe className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                <select
-                                    value={selectedCountry}
-                                    onChange={(e) => setSelectedCountry(e.target.value)}
-                                    className="bg-transparent text-slate-200 focus:outline-none cursor-pointer text-xs"
-                                >
-                                    <option value="all" className="bg-[#030b14] text-slate-200">
-                                        AGENCY: ALL
-                                    </option>
-                                    {countries.map((c) => (
-                                        <option key={c} value={c} className="bg-[#030b14] text-slate-200">
-                                            {c}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                            <select value={selectedGender} onChange={(e) => setSelectedGender(e.target.value)} className={selectCls}>
+                                <option value="all">Gender: all</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
 
-                            {/* Reset Filters */}
+                            <select value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)} className={selectCls}>
+                                <option value="all">Agency: all</option>
+                                {countries.map((c) => (
+                                    <option key={c} value={c}>
+                                        {c}
+                                    </option>
+                                ))}
+                            </select>
+
                             {hasActiveFilters && (
-                                <button
-                                    onClick={resetFilters}
-                                    className="px-3 py-2 border border-slate-700 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1 cursor-pointer"
-                                    title="Reset active filters"
-                                >
-                                    <RefreshCw className="w-3 h-3" />
-                                    <span>RESET</span>
+                                <button type="button" onClick={resetFilters} className={btn}>
+                                    <RefreshCw size={14} /> Reset
                                 </button>
                             )}
 
-                            <div className="px-3 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 text-xs tracking-wider">
-                                SHOWING: <strong className="text-[#5cdbdf]">{filteredRecords.length}</strong> / {localRecords.length}
-                            </div>
+                            <span className="rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-300">
+                                Showing <strong className="text-cyan-300">{filteredRecords.length}</strong> / {localRecords.length}
+                            </span>
                         </div>
-                    </div>
 
-                    {/* Main Telemetry Table Container */}
-                    <div className="border border-[#1a4b6c] bg-[#06121e]/90 relative backdrop-blur-md overflow-hidden">
-                        <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#5cdbdf]" />
-                        <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                    <tr className="bg-[#0a1f2e] border-b border-[#1a4b6c] text-[#5cdbdf] tracking-wider uppercase font-bold">
-                                        {/* Selection Checkbox */}
-                                        <th className="p-3.5 w-10 text-center">
-                                            <button
-                                                type="button"
-                                                onClick={toggleSelectAll}
-                                                className="p-1 hover:text-white transition-colors cursor-pointer"
-                                                title={isAllSelected ? 'Deselect all visible rows' : 'Select all visible rows'}
-                                            >
+                        {/* Table */}
+                        <div className="mt-5 overflow-x-auto rounded-xl border border-slate-800">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-[#0a1220] text-xs uppercase tracking-wider text-slate-400">
+                                    <tr>
+                                        <th className="w-10 px-4 py-3">
+                                            <button type="button" onClick={toggleSelectAll} className="cursor-pointer" title="Select all visible rows">
                                                 {isAllSelected ? (
-                                                    <CheckSquare className="w-4 h-4 text-[#5cdbdf]" />
+                                                    <CheckSquare size={16} className="text-cyan-300" />
                                                 ) : (
-                                                    <Square className="w-4 h-4 text-slate-500" />
+                                                    <Square size={16} className="text-slate-500" />
                                                 )}
                                             </button>
                                         </th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('id')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>ASTRONAUT ID</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('name')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>CREW MEMBER</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th className="p-3.5">PRIMARY HAZARD (RIDGE)</th>
-                                        <th className="p-3.5">RISK LEVEL</th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('duration')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>FLIGHT DURATION</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('boneLoss')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>BMD LOSS (G)</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th
-                                            className="p-3.5 cursor-pointer hover:text-white transition-colors"
-                                            onClick={() => handleSort('radiation')}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span>DOSIMETRY (R)</span>
-                                                <ArrowUpDown className="w-3 h-3" />
-                                            </div>
-                                        </th>
-                                        <th className="p-3.5">AFFILIATION / AGENCY</th>
-                                        <th className="p-3.5 text-right">ACTIONS</th>
+                                        {th('Astronaut ID', 'id')}
+                                        {th('Crew member', 'name')}
+                                        {th('Primary hazard')}
+                                        {th('Risk level')}
+                                        {th('Flight duration', 'duration')}
+                                        {th('BMD loss', 'boneLoss')}
+                                        {th('Dosimetry', 'radiation')}
+                                        {th('Agency')}
+                                        <th className="px-4 py-3 text-right font-semibold">Actions</th>
                                     </tr>
                                 </thead>
 
-                                <tbody className="divide-y divide-[#1a4b6c]/40">
+                                <tbody>
                                     {filteredRecords.length === 0 ? (
                                         <tr>
-                                            <td colSpan={10} className="p-12 text-center text-slate-400 font-mono">
-                                                <div className="max-w-md mx-auto space-y-3">
-                                                    <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                                                    <p className="text-white font-bold text-sm tracking-widest">
-                                                        NO MATCHING TELEMETRY RECORDS FOUND
-                                                    </p>
-                                                    <p className="text-slate-400 text-xs">
-                                                        No records match the selected filter parameters. Clear the search input or reset filters.
-                                                    </p>
-                                                    <button
-                                                        onClick={resetFilters}
-                                                        className="px-4 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] transition-all text-xs tracking-wider cursor-pointer"
-                                                    >
-                                                        RESET ALL FILTERS
-                                                    </button>
-                                                </div>
+                                            <td colSpan={10} className="p-12 text-center">
+                                                <AlertTriangle size={28} className="mx-auto text-amber-400" />
+                                                <p className="mt-3 font-semibold">No matching records found</p>
+                                                <p className="mt-1 text-sm text-slate-400">
+                                                    Clear the search or reset the filters to see more.
+                                                </p>
+                                                <button type="button" onClick={resetFilters} className={`${btn} mt-4`}>
+                                                    Reset all filters
+                                                </button>
                                             </td>
                                         </tr>
                                     ) : (
                                         filteredRecords.map((record, index) => {
                                             const recordId = record.Astronaut ?? record.id ?? index;
                                             const isSelected = selectedIds.includes(recordId);
-                                            const boneBadge = getBoneLossBadge(record.Bone_Density_Loss);
-                                            const hazardBadge = getHazardBadge(record.Hazard_Focus);
-                                            const riskBadgeClass = getRiskLevelBadge(record.Risk_Level);
-                                            const durationNum = Number(record['Mission_duration(Days)'] ?? (record as any).duration ?? (record as any).missionDurationDays ?? (record as any).Mission_duration) || 0;
-                                            const durationPercent = Math.min(100, Math.round((durationNum / 365) * 100));
+                                            const bone = getBoneLossBadge(record.Bone_Density_Loss);
+                                            const hazard = getHazardBadge(record.Hazard_Focus);
+                                            const durationNum =
+                                                Number(
+                                                    record['Mission_duration(Days)'] ??
+                                                        (record as any).duration ??
+                                                        (record as any).missionDurationDays ??
+                                                        (record as any).Mission_duration,
+                                                ) || 0;
+                                            const pct = Math.min(100, Math.round((durationNum / 365) * 100));
 
                                             return (
                                                 <tr
                                                     key={recordId}
                                                     onClick={() => setSelectedAstronaut(record)}
-                                                    className={`hover:bg-[#0b3d91]/20 transition-colors cursor-pointer group ${
-                                                        isSelected ? 'bg-[#5cdbdf]/10 border-l-2 border-l-[#5cdbdf]' : ''
+                                                    className={`cursor-pointer border-t border-slate-800/70 transition hover:bg-slate-800/30 ${
+                                                        isSelected ? 'bg-cyan-400/5' : ''
                                                     }`}
                                                 >
-                                                    {/* Row Checkbox */}
-                                                    <td
-                                                        className="p-3.5 text-center"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleSelectRow(recordId)}
-                                                            className="p-1 hover:text-white transition-colors cursor-pointer"
-                                                            title={isSelected ? 'Deselect row' : 'Select row'}
-                                                        >
+                                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                        <button type="button" onClick={() => toggleSelectRow(recordId)} className="cursor-pointer">
                                                             {isSelected ? (
-                                                                <CheckSquare className="w-4 h-4 text-[#5cdbdf]" />
+                                                                <CheckSquare size={16} className="text-cyan-300" />
                                                             ) : (
-                                                                <Square className="w-4 h-4 text-slate-500" />
+                                                                <Square size={16} className="text-slate-500" />
                                                             )}
                                                         </button>
                                                     </td>
 
-                                                    {/* Astronaut ID */}
-                                                    <td className="p-3.5 font-bold text-slate-300 font-mono">
-                                                        <span className="px-2 py-0.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf]">
+                                                    <td className="px-4 py-3">
+                                                        <span className="rounded-lg bg-cyan-400/10 px-2 py-1 text-xs font-bold text-cyan-300">
                                                             AST-{recordId}
                                                         </span>
                                                     </td>
 
-                                                    {/* Crew Member Name */}
-                                                    <td className="p-3.5">
-                                                        <div className="font-bold text-white group-hover:text-[#5cdbdf] transition-colors flex items-center gap-2">
-                                                            <div className="w-6 h-6 rounded bg-[#0a1f2e] border border-[#1a4b6c] flex items-center justify-center text-[10px] text-[#5cdbdf] font-bold">
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-cyan-300">
                                                                 {(record.Name || 'A').charAt(0)}
+                                                            </span>
+                                                            <div>
+                                                                <p className="font-semibold">{record.Name || 'Astronaut Specialist'}</p>
+                                                                <p className="text-xs text-slate-500">
+                                                                    {record.NASA_HRP_Protocol || 'NASA-STD-3001'}
+                                                                </p>
                                                             </div>
-                                                            <span>{record.Name || 'Astronaut Specialist'}</span>
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-400 mt-0.5">
-                                                            Flight Protocol: {record.NASA_HRP_Protocol || 'NASA-STD-3001'}
                                                         </div>
                                                     </td>
 
-                                                    {/* Primary Hazard Focus (RIDGE) */}
-                                                    <td className="p-3.5">
-                                                        <span className={`px-2 py-0.5 text-[10px] font-bold border rounded-sm inline-flex items-center gap-1.5 ${hazardBadge.color}`}>
-                                                            <span>[{hazardBadge.code}]</span>
-                                                            <span>{hazardBadge.text}</span>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`${badge} ${hazard.color}`}>
+                                                            [{hazard.code}] {hazard.text}
                                                         </span>
                                                     </td>
 
-                                                    {/* Risk Level */}
-                                                    <td className="p-3.5">
-                                                        <span className={`px-2 py-0.5 text-[10px] font-bold border rounded-sm ${riskBadgeClass}`}>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`${badge} ${getRiskLevelBadge(record.Risk_Level)}`}>
                                                             {record.Risk_Level || 'Nominal'}
                                                         </span>
                                                     </td>
 
-                                                    {/* Flight Duration */}
-                                                    <td className="p-3.5">
-                                                        <div className="font-bold text-white">
-                                                            {durationNum} <span className="text-[10px] text-slate-400 font-normal">DAYS</span>
-                                                        </div>
-                                                        <div className="w-24 h-1.5 bg-[#0a1f2e] border border-[#1a4b6c] mt-1 overflow-hidden">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-semibold">
+                                                            {durationNum} <span className="text-xs font-normal text-slate-500">days</span>
+                                                        </p>
+                                                        <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-slate-800">
                                                             <div
-                                                                className="h-full bg-gradient-to-r from-sky-500 to-[#5cdbdf]"
-                                                                style={{ width: `${durationPercent}%` }}
+                                                                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400"
+                                                                style={{ width: `${pct}%` }}
                                                             />
                                                         </div>
                                                     </td>
 
-                                                    {/* BMD Loss (Bone) */}
-                                                    <td className="p-3.5">
-                                                        <span
-                                                            className={`px-2 py-0.5 border text-xs font-bold inline-block font-mono ${boneBadge.color}`}
-                                                        >
-                                                            {boneBadge.text}
-                                                        </span>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`${badge} ${bone.color}`}>{bone.text}</span>
                                                     </td>
 
-                                                    {/* Radiation Exposure */}
-                                                    <td className="p-3.5 font-mono">
-                                                        <div className="text-amber-300 font-bold">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-semibold text-amber-300">
                                                             {record.Radiation_Exposure ? `${record.Radiation_Exposure} mSv` : '85 mSv'}
-                                                        </div>
-                                                        <span className="text-[10px] text-slate-500">
-                                                            Max Limit: 300 mSv
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">Limit: 300 mSv</p>
+                                                    </td>
+
+                                                    <td className="px-4 py-3 text-slate-300">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <Globe size={14} className="text-cyan-300" />
+                                                            <span className="max-w-[150px] truncate">{record.Country || 'USA / NASA'}</span>
                                                         </span>
                                                     </td>
 
-                                                    {/* Affiliation / Agency */}
-                                                    <td className="p-3.5 text-slate-300">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Globe className="w-3.5 h-3.5 text-[#5cdbdf]" />
-                                                            <span className="truncate max-w-[150px]">{record.Country || 'USA / NASA'}</span>
+                                                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                                        <div className="flex justify-end gap-2">
+                                                            <button onClick={() => setSelectedAstronaut(record)} className={`${iconBtn} text-cyan-300`} title="View dossier">
+                                                                <Eye size={16} />
+                                                            </button>
+                                                            <button onClick={() => handleOpenEdit(record)} className={`${iconBtn} text-amber-300`} title="Edit record">
+                                                                <Edit3 size={16} />
+                                                            </button>
+                                                            <button onClick={() => setDeletingRecord(record)} className={`${iconBtn} text-red-400`} title="Delete record">
+                                                                <Trash2 size={16} />
+                                                            </button>
                                                         </div>
-                                                    </td>
-
-                                                    {/* Actions */}
-                                                    <td
-                                                        className="p-3.5 text-right space-x-1"
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                        <button
-                                                            onClick={() => setSelectedAstronaut(record)}
-                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-colors cursor-pointer inline-block"
-                                                            title="Inspect Full Medical Dossier"
-                                                        >
-                                                            <Eye className="w-3.5 h-3.5" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => handleOpenEdit(record)}
-                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-amber-400 hover:border-amber-400 hover:text-white transition-colors cursor-pointer inline-block"
-                                                            title="Edit record parameters"
-                                                        >
-                                                            <Edit3 className="w-3.5 h-3.5" />
-                                                        </button>
-
-                                                        <button
-                                                            onClick={() => setDeletingRecord(record)}
-                                                            className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-rose-400 hover:border-rose-400 hover:text-white transition-colors cursor-pointer inline-block"
-                                                            title="Delete record from database"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
@@ -1703,768 +1540,296 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </section>
 
-                    {/* Bottom Status & Help Note */}
-                    <footer className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 border-t border-[#1a4b6c]/40 pt-4 font-mono">
-                        <div>
-                            ORBIT • FLIGHT SURGEON BIOASTRONAUTICS CONSOLE // JSC-HOU-9904
-                        </div>
-                        <div className="flex items-center gap-4 text-slate-400">
-                            <span>TOTAL DATABASE RECORDS: <strong className="text-[#5cdbdf]">{localRecords.length}</strong></span>
-                            <span>SYNC ENGINE: <strong className="text-emerald-400">SQLITE // NASA HRP ATOMIC</strong></span>
-                        </div>
+                    <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-4 text-xs text-slate-500">
+                        <span>ORBIT • Flight Surgeon Bioastronautics Console</span>
+                        <span>
+                            Total records: <strong className="text-cyan-300">{localRecords.length}</strong>
+                        </span>
                     </footer>
                 </div>
 
-                {/* MODAL 1: Manual Add Astronaut Modal */}
+                {/* Add modal */}
                 {isManualAddOpen && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setIsManualAddOpen(false)}
+                    <Modal
+                        onClose={() => setIsManualAddOpen(false)}
+                        title="Add astronaut record"
+                        subtitle="Saved directly to the dataset database"
+                        icon={<UserPlus size={20} />}
                     >
-                        <div
-                            className="relative w-full max-w-2xl border border-[#1a4b6c] bg-[#06121e] p-6 shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-3 mb-4 shrink-0">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="p-1.5 border border-[#5cdbdf]/40 bg-[#5cdbdf]/10 text-[#5cdbdf]">
-                                        <UserPlus className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm sm:text-base font-bold text-white tracking-wider">
-                                            MANUAL ADD ASTRONAUT RECORD
-                                        </h3>
-                                        <p className="text-[11px] text-slate-400">
-                                            Inserts record directly into SQLite <code className="text-[#5cdbdf]">dataset_records</code>
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsManualAddOpen(false)}
-                                    className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
+                        <form onSubmit={handleManualAddSubmit} className="space-y-5">
+                            {recordFields(manualForm, setManualForm, true)}
+                            <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                                <button type="button" onClick={() => setIsManualAddOpen(false)} className={btn}>
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={isSubmitting} className={btnPrimary}>
+                                    <Check size={16} /> {isSubmitting ? 'Saving...' : 'Save record'}
                                 </button>
                             </div>
-
-                            <form onSubmit={handleManualAddSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            ASTRONAUT ID (LEAVE BLANK FOR AUTO-INCREMENT)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={manualForm.Astronaut}
-                                            onChange={(e) => setManualForm({ ...manualForm, Astronaut: e.target.value })}
-                                            placeholder="e.g. 13 (or auto)"
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            CREW MEMBER NAME *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={manualForm.Name}
-                                            onChange={(e) => setManualForm({ ...manualForm, Name: e.target.value })}
-                                            placeholder="e.g. CDR. Sarah Connor"
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            PRIMARY HAZARD FOCUS (RIDGE)
-                                        </label>
-                                        <select
-                                            value={manualForm.Hazard_Focus}
-                                            onChange={(e) => setManualForm({ ...manualForm, Hazard_Focus: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        >
-                                            <option value="Space Radiation (R)">R - Space Radiation</option>
-                                            <option value="Isolation and Confinement (I)">I - Isolation & Confinement</option>
-                                            <option value="Distance from Earth (D)">D - Distance from Earth</option>
-                                            <option value="Gravity Fields (G)">G - Gravity Fields</option>
-                                            <option value="Hostile and Closed Environments (E)">E - Hostile & Closed Environments</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            RISK LEVEL
-                                        </label>
-                                        <select
-                                            value={manualForm.Risk_Level}
-                                            onChange={(e) => setManualForm({ ...manualForm, Risk_Level: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        >
-                                            <option value="Nominal">Nominal</option>
-                                            <option value="Guarded">Guarded</option>
-                                            <option value="Elevated">Elevated</option>
-                                            <option value="Critical">Critical</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            LAUNCH AGE
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={manualForm.Age_at_mission_start}
-                                            onChange={(e) =>
-                                                setManualForm({
-                                                    ...manualForm,
-                                                    Age_at_mission_start: parseInt(e.target.value) || 40,
-                                                })
-                                            }
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            GENDER
-                                        </label>
-                                        <select
-                                            value={manualForm.Gender}
-                                            onChange={(e) => setManualForm({ ...manualForm, Gender: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf] uppercase"
-                                        >
-                                            <option value="Male">Male</option>
-                                            <option value="Female">Female</option>
-                                            <option value="Other">Other</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            AGENCY / COUNTRY
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={manualForm.Country}
-                                            onChange={(e) => setManualForm({ ...manualForm, Country: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            MISSION DURATION (DAYS)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={manualForm['Mission_duration(Days)']}
-                                            onChange={(e) =>
-                                                setManualForm({
-                                                    ...manualForm,
-                                                    'Mission_duration(Days)': parseInt(e.target.value) || 180,
-                                                })
-                                            }
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            BONE MINERAL DENSITY LOSS
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={manualForm.Bone_Density_Loss}
-                                            onChange={(e) => setManualForm({ ...manualForm, Bone_Density_Loss: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            RADIATION EXPOSURE (mSv)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={manualForm.Radiation_Exposure}
-                                            onChange={(e) => setManualForm({ ...manualForm, Radiation_Exposure: parseInt(e.target.value) || 95 })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[10px] text-slate-400 mb-1">
-                                        COUNTERMEASURES PROTOCOL
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={manualForm.Countermeasures_Used}
-                                        onChange={(e) => setManualForm({ ...manualForm, Countermeasures_Used: e.target.value })}
-                                        className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1a4b6c]">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsManualAddOpen(false)}
-                                        className="px-4 py-2 border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
-                                    >
-                                        CANCEL
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="px-5 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        <Check className="w-4 h-4" />
-                                        <span>{isSubmitting ? 'INSERTING...' : 'SAVE RECORD'}</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                        </form>
+                    </Modal>
                 )}
 
-                {/* MODAL 2: Edit Record Modal */}
+                {/* Edit modal */}
                 {isEditModalOpen && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setIsEditModalOpen(false)}
+                    <Modal
+                        onClose={() => setIsEditModalOpen(false)}
+                        title={`Edit astronaut record #${editForm.Astronaut}`}
+                        subtitle="Update physiological and hazard parameters"
+                        icon={<Edit3 size={20} />}
                     >
-                        <div
-                            className="relative w-full max-w-2xl border border-sky-600 bg-[#06121e] p-6 shadow-[0_0_50px_rgba(2,132,199,0.3)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-3 mb-4 shrink-0">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="p-1.5 border border-sky-400/40 bg-sky-950/60 text-sky-400">
-                                        <Edit3 className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm sm:text-base font-bold text-white tracking-wider">
-                                            EDIT ASTRONAUT RECORD #{editForm.Astronaut}
-                                        </h3>
-                                        <p className="text-[11px] text-slate-400">
-                                            Update physiological & hazard monitoring parameters
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setIsEditModalOpen(false)}
-                                    className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
+                        <form onSubmit={handleEditSubmit} className="space-y-5">
+                            {recordFields(editForm, setEditForm, false)}
+                            <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                                <button type="button" onClick={() => setIsEditModalOpen(false)} className={btn}>
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={isSubmitting} className={btnPrimary}>
+                                    <Check size={16} /> {isSubmitting ? 'Updating...' : 'Save changes'}
                                 </button>
                             </div>
-
-                            <form onSubmit={handleEditSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            CREW MEMBER NAME *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={editForm.Name}
-                                            onChange={(e) => setEditForm({ ...editForm, Name: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            PRIMARY HAZARD FOCUS (RIDGE)
-                                        </label>
-                                        <select
-                                            value={editForm.Hazard_Focus}
-                                            onChange={(e) => setEditForm({ ...editForm, Hazard_Focus: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        >
-                                            <option value="Space Radiation (R)">R - Space Radiation</option>
-                                            <option value="Isolation and Confinement (I)">I - Isolation & Confinement</option>
-                                            <option value="Distance from Earth (D)">D - Distance from Earth</option>
-                                            <option value="Gravity Fields (G)">G - Gravity Fields</option>
-                                            <option value="Hostile and Closed Environments (E)">E - Hostile & Closed Environments</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            RISK LEVEL
-                                        </label>
-                                        <select
-                                            value={editForm.Risk_Level}
-                                            onChange={(e) => setEditForm({ ...editForm, Risk_Level: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        >
-                                            <option value="Nominal">Nominal</option>
-                                            <option value="Guarded">Guarded</option>
-                                            <option value="Elevated">Elevated</option>
-                                            <option value="Critical">Critical</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            AGENCY / COUNTRY
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={editForm.Country}
-                                            onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            MISSION DURATION (DAYS)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={editForm['Mission_duration(Days)']}
-                                            onChange={(e) =>
-                                                setEditForm({
-                                                    ...editForm,
-                                                    'Mission_duration(Days)': parseInt(e.target.value) || 180,
-                                                })
-                                            }
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            BONE MINERAL DENSITY LOSS
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={editForm.Bone_Density_Loss}
-                                            onChange={(e) => setEditForm({ ...editForm, Bone_Density_Loss: e.target.value })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-slate-400 mb-1">
-                                            RADIATION EXPOSURE (mSv)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={editForm.Radiation_Exposure}
-                                            onChange={(e) => setEditForm({ ...editForm, Radiation_Exposure: parseInt(e.target.value) || 95 })}
-                                            className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[10px] text-slate-400 mb-1">
-                                        COUNTERMEASURES PROTOCOL
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editForm.Countermeasures_Used}
-                                        onChange={(e) =>
-                                            setEditForm({ ...editForm, Countermeasures_Used: e.target.value })
-                                        }
-                                        className="w-full bg-[#0a1f2e] border border-[#1a4b6c] px-3 py-1.5 text-white focus:outline-none focus:border-[#5cdbdf]"
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1a4b6c]">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsEditModalOpen(false)}
-                                        className="px-4 py-2 border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
-                                    >
-                                        CANCEL
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="px-5 py-2 border border-sky-400 bg-sky-500 text-[#030b14] font-bold hover:brightness-110 cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        <Check className="w-4 h-4" />
-                                        <span>{isSubmitting ? 'UPDATING...' : 'SAVE CHANGES'}</span>
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                        </form>
+                    </Modal>
                 )}
 
-                {/* MODAL 3: Delete Record Confirmation */}
+                {/* Delete modal */}
                 {deletingRecord && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setDeletingRecord(null)}
+                    <Modal
+                        onClose={() => setDeletingRecord(null)}
+                        title="Delete record"
+                        icon={<AlertTriangle size={20} className="text-red-400" />}
+                        size="max-w-md"
                     >
-                        <div
-                            className="relative w-full max-w-md border border-red-800/80 bg-[#06121e] p-6 shadow-[0_0_50px_rgba(239,68,68,0.3)] overflow-hidden font-mono text-xs space-y-4"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center gap-3 text-red-400">
-                                <AlertTriangle className="w-6 h-6 shrink-0" />
-                                <h3 className="text-base font-bold text-white tracking-wider">
-                                    CONFIRM RECORD DELETION
-                                </h3>
-                            </div>
-                            <p className="text-slate-300 leading-relaxed">
-                                Are you sure you want to permanently remove astronaut record{' '}
-                                <strong className="text-white">
-                                    {deletingRecord.Name} (#{deletingRecord.Astronaut ?? deletingRecord.id})
-                                </strong>{' '}
-                                from the SQLite database?
-                            </p>
-                            <div className="flex items-center justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setDeletingRecord(null)}
-                                    className="px-4 py-2 border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
-                                >
-                                    CANCEL
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleConfirmDelete}
-                                    disabled={isSubmitting}
-                                    className="px-4 py-2 border border-red-500 bg-red-600 text-white font-bold hover:bg-red-500 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>{isSubmitting ? 'DELETING...' : 'CONFIRM DELETE'}</span>
-                                </button>
-                            </div>
+                        <p className="text-sm leading-relaxed text-slate-300">
+                            Permanently remove{' '}
+                            <strong className="text-white">
+                                {deletingRecord.Name} (#{deletingRecord.Astronaut ?? deletingRecord.id})
+                            </strong>{' '}
+                            from the database? This cannot be undone.
+                        </p>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button type="button" onClick={() => setDeletingRecord(null)} className={btn}>
+                                Cancel
+                            </button>
+                            <button type="button" onClick={handleConfirmDelete} disabled={isSubmitting} className={btnDanger}>
+                                <Trash2 size={16} /> {isSubmitting ? 'Deleting...' : 'Delete'}
+                            </button>
                         </div>
-                    </div>
+                    </Modal>
                 )}
 
-                {/* MODAL 4: Bulk Delete Confirmation */}
+                {/* Bulk delete modal */}
                 {isBulkDeleteConfirmOpen && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setIsBulkDeleteConfirmOpen(false)}
+                    <Modal
+                        onClose={() => setIsBulkDeleteConfirmOpen(false)}
+                        title="Delete selected records"
+                        icon={<AlertTriangle size={20} className="text-red-400" />}
+                        size="max-w-md"
                     >
-                        <div
-                            className="relative w-full max-w-md border border-red-800/80 bg-[#06121e] p-6 shadow-[0_0_50px_rgba(239,68,68,0.3)] overflow-hidden font-mono text-xs space-y-4"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="flex items-center gap-3 text-red-400">
-                                <AlertTriangle className="w-6 h-6 shrink-0" />
-                                <h3 className="text-base font-bold text-white tracking-wider">
-                                    BULK DELETE CONFIRMATION
-                                </h3>
-                            </div>
-                            <p className="text-slate-300 leading-relaxed">
-                                You are about to permanently delete{' '}
-                                <strong className="text-red-400">{selectedIds.length}</strong> selected astronaut records from the database.
-                            </p>
-                            <div className="flex items-center justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsBulkDeleteConfirmOpen(false)}
-                                    className="px-4 py-2 border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
-                                >
-                                    CANCEL
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleConfirmBulkDelete}
-                                    disabled={isSubmitting}
-                                    className="px-4 py-2 border border-red-500 bg-red-600 text-white font-bold hover:bg-red-500 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>{isSubmitting ? 'DELETING ALL...' : `DELETE ALL ${selectedIds.length} RECORDS`}</span>
-                                </button>
-                            </div>
+                        <p className="text-sm leading-relaxed text-slate-300">
+                            You are about to permanently delete{' '}
+                            <strong className="text-red-400">{selectedIds.length}</strong> astronaut records. This cannot be undone.
+                        </p>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button type="button" onClick={() => setIsBulkDeleteConfirmOpen(false)} className={btn}>
+                                Cancel
+                            </button>
+                            <button type="button" onClick={handleConfirmBulkDelete} disabled={isSubmitting} className={btnDanger}>
+                                <Trash2 size={16} /> {isSubmitting ? 'Deleting...' : `Delete ${selectedIds.length} records`}
+                            </button>
                         </div>
-                    </div>
+                    </Modal>
                 )}
 
-                {/* MODAL 5: Telemetry Scan & Bulk Import Modal */}
+                {/* Import modal */}
                 <TelemetryImportModal
                     isOpen={isImportModalOpen}
                     onClose={() => setIsImportModalOpen(false)}
                     onSaveToDatabase={handleSaveImportToDatabase}
                 />
 
-                {/* MODAL 6: NASA 5 HAZARDS DETAIL MODAL */}
+                {/* Hazard detail modal */}
                 {selectedHazardModal && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setSelectedHazardModal(null)}
+                    <Modal
+                        onClose={() => setSelectedHazardModal(null)}
+                        title={`${selectedHazardModal.title} (${selectedHazardModal.hazard_id})`}
+                        subtitle={`${selectedHazardModal.category} • NASA Human Research Program`}
+                        icon={<span className="font-bold">{selectedHazardModal.hazard_code}</span>}
+                        size="max-w-3xl"
                     >
-                        <div
-                            className="relative w-full max-w-3xl border border-[#5cdbdf] bg-[#06121e] p-6 sm:p-8 shadow-[0_0_60px_rgba(92,219,223,0.3)] overflow-hidden font-mono max-h-[90vh] flex flex-col"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                            {/* Header */}
-                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-4 mb-4 shrink-0">
-                                <div className="flex items-center gap-3">
-                                    <span className="w-10 h-10 flex items-center justify-center font-bold text-xl bg-[#030b14] border-2 border-[#5cdbdf] text-[#5cdbdf]">
-                                        {selectedHazardModal.hazard_code}
-                                    </span>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-base sm:text-lg font-bold text-white tracking-wider">
-                                                {selectedHazardModal.title}
-                                            </h3>
-                                            <span className="text-[10px] px-2 py-0.5 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf]">
-                                                {selectedHazardModal.hazard_id}
-                                            </span>
-                                        </div>
-                                        <p className="text-[11px] text-slate-400 mt-0.5">
-                                            {selectedHazardModal.category} • NASA Human Research Program (HRP)
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedHazardModal(null)}
-                                    className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf] transition-colors cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            {/* Modal Content Scrollable */}
-                            <div className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs text-slate-300">
-                                {/* Description & Deep Space Context */}
-                                <div className="p-3.5 border border-[#1a4b6c] bg-[#0a1f2e]/70 space-y-2">
-                                    <span className="text-[10px] text-[#5cdbdf] font-bold tracking-wider block">
-                                        DEEP SPACE FLIGHT CONTEXT
-                                    </span>
-                                    <p className="leading-relaxed">
-                                        {selectedHazardModal.description}
+                        <div className="space-y-4 text-sm text-slate-300">
+                            <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                <p className="text-xs font-bold uppercase tracking-wider text-cyan-300">Deep space context</p>
+                                <p className="mt-2 leading-relaxed">{selectedHazardModal.description}</p>
+                                {selectedHazardModal.deep_space_context && (
+                                    <p className="mt-3 border-t border-slate-800 pt-3 italic text-slate-400">
+                                        {selectedHazardModal.deep_space_context}
                                     </p>
-                                    {selectedHazardModal.deep_space_context && (
-                                        <p className="text-slate-400 font-sans italic pt-1 border-t border-[#1a4b6c]/40">
-                                            {selectedHazardModal.deep_space_context}
-                                        </p>
-                                    )}
+                                )}
+                            </div>
+
+                            {selectedHazardModal.key_risks && selectedHazardModal.key_risks.length > 0 && (
+                                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-300">
+                                        <ShieldAlert size={14} /> Primary physiological risks
+                                    </p>
+                                    <ul className="mt-2 list-disc space-y-1.5 pl-5 marker:text-red-400">
+                                        {selectedHazardModal.key_risks.map((risk, i) => (
+                                            <li key={i}>{risk}</li>
+                                        ))}
+                                    </ul>
                                 </div>
+                            )}
 
-                                {/* Key Physiological Risks */}
-                                {selectedHazardModal.key_risks && selectedHazardModal.key_risks.length > 0 && (
-                                    <div className="p-3.5 border border-rose-950/80 bg-rose-950/20 space-y-2">
-                                        <span className="text-[10px] text-rose-400 font-bold tracking-wider flex items-center gap-1.5">
-                                            <ShieldAlert className="w-3.5 h-3.5" /> PRIMARY PHYSIOLOGICAL RISKS & CLINICAL PATHOLOGY
-                                        </span>
-                                        <ul className="space-y-1.5 text-slate-300 pl-4 list-disc marker:text-rose-400">
-                                            {selectedHazardModal.key_risks.map((risk, idx) => (
-                                                <li key={idx} className="leading-relaxed">
-                                                    {risk}
-                                                </li>
-                                            ))}
-                                        </ul>
+                            {selectedHazardModal.biomedical_metrics && selectedHazardModal.biomedical_metrics.length > 0 && (
+                                <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                                        <Activity size={14} /> Clinical thresholds
+                                    </p>
+                                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                        {selectedHazardModal.biomedical_metrics.map((m, i) => (
+                                            <div key={i} className="rounded-lg border border-slate-800 bg-[#0b1626] p-3">
+                                                <p className="text-xs text-slate-400">{m.metric}</p>
+                                                <p className="mt-1 text-xs font-semibold text-emerald-300">Nominal: {m.nominal}</p>
+                                                <p className="text-xs font-semibold text-red-300">Alert: {m.critical}</p>
+                                            </div>
+                                        ))}
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {/* Key Biomedical Sensor Metrics */}
-                                {selectedHazardModal.biomedical_metrics && selectedHazardModal.biomedical_metrics.length > 0 && (
-                                    <div className="p-3.5 border border-[#1a4b6c] bg-[#0a1f2e]/60 space-y-2">
-                                        <span className="text-[10px] text-[#5cdbdf] font-bold tracking-wider flex items-center gap-1.5">
-                                            <Activity className="w-3.5 h-3.5" /> CLINICAL THRESHOLDS & DOSIMETRY METRICS
-                                        </span>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-                                            {selectedHazardModal.biomedical_metrics.map((m, idx) => (
-                                                <div key={idx} className="p-2 border border-[#1a4b6c]/60 bg-[#06121e]">
-                                                    <span className="text-[10px] text-slate-400 block">{m.metric}</span>
-                                                    <div className="flex items-center justify-between mt-1">
-                                                        <span className="text-emerald-400 font-bold text-[11px] font-mono">
-                                                            Nominal: {m.nominal}
-                                                        </span>
-                                                        <span className="text-rose-400 text-[11px] font-mono">
-                                                            Alert: {m.critical}
-                                                        </span>
-                                                    </div>
+                            {selectedHazardModal.countermeasures && selectedHazardModal.countermeasures.length > 0 && (
+                                <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+                                    <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-300">
+                                        <CheckCircle2 size={14} /> Deployed countermeasures
+                                    </p>
+                                    <div className="mt-3 space-y-2">
+                                        {selectedHazardModal.countermeasures.map((cm, i) => (
+                                            <div key={i} className="rounded-lg border border-slate-800 bg-[#0b1626] p-3">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <strong className="text-sm text-white">{cm.name}</strong>
+                                                    <span className="shrink-0 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                                        {cm.status}
+                                                    </span>
                                                 </div>
-                                            ))}
-                                        </div>
+                                                <p className="mt-1 text-xs text-slate-400">{cm.desc}</p>
+                                            </div>
+                                        ))}
                                     </div>
-                                )}
-
-                                {/* NASA Countermeasures & Technologies */}
-                                {selectedHazardModal.countermeasures && selectedHazardModal.countermeasures.length > 0 && (
-                                    <div className="p-3.5 border border-emerald-950/80 bg-emerald-950/20 space-y-2">
-                                        <span className="text-[10px] text-emerald-400 font-bold tracking-wider flex items-center gap-1.5">
-                                            <CheckCircle2 className="w-3.5 h-3.5" /> DEPLOYED NASA COUNTERMEASURES & TECHNOLOGIES
-                                        </span>
-                                        <div className="space-y-2 mt-2">
-                                            {selectedHazardModal.countermeasures.map((cm, idx) => (
-                                                <div key={idx} className="p-2 border border-emerald-900/60 bg-[#06121e]">
-                                                    <div className="flex items-center justify-between">
-                                                        <strong className="text-white text-[11px]">{cm.name}</strong>
-                                                        <span className="text-[9px] px-1.5 py-0.5 border border-emerald-700 bg-emerald-950/60 text-emerald-300">
-                                                            {cm.status}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-[10px] text-slate-400 mt-1">{cm.desc}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Footer Buttons */}
-                            <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#1a4b6c] mt-4 shrink-0">
-                                <a
-                                    href={selectedHazardModal.nasa_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-3.5 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-[#5cdbdf] hover:border-[#5cdbdf] hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold"
-                                >
-                                    <span>OFFICIAL NASA HRP DOCUMENTATION</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-
-                                <button
-                                    onClick={() => {
-                                        setSelectedHazardFilter(selectedHazardModal.hazard_code);
-                                        setSelectedHazardModal(null);
-                                        toast.info(`Filtered roster to crew evaluated under ${selectedHazardModal.title}`);
-                                    }}
-                                    className="px-4 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-[#030b14] font-bold hover:brightness-110 transition-all text-xs"
-                                >
-                                    FILTER CREW BY THIS HAZARD
-                                </button>
-                            </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
+
+                        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
+                            <a href={selectedHazardModal.nasa_url} target="_blank" rel="noopener noreferrer" className={btn}>
+                                NASA HRP documentation <ExternalLink size={14} />
+                            </a>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedHazardFilter(selectedHazardModal.hazard_code);
+                                    setSelectedHazardModal(null);
+                                    toast.info(`Filtered roster to crew evaluated under ${selectedHazardModal.title}`);
+                                }}
+                                className={btnPrimary}
+                            >
+                                Filter crew by this hazard
+                            </button>
+                        </div>
+                    </Modal>
                 )}
 
-                {/* MODAL 7: Astronaut Inspection Detail Modal (NASA Dossier with 5 Hazards Profile) */}
+                {/* Astronaut dossier modal */}
                 {selectedAstronaut && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
-                        onClick={() => setSelectedAstronaut(null)}
+                    <Modal
+                        onClose={() => setSelectedAstronaut(null)}
+                        title={selectedAstronaut.Name || 'Astronaut Specialist'}
+                        subtitle={`Callsign AST-${selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'} • NASA HRP Bioastronautics`}
+                        icon={<span className="font-bold">{(selectedAstronaut.Name || 'A').charAt(0)}</span>}
+                        size="max-w-xl"
                     >
-                        <div
-                            className="relative w-full max-w-xl border border-[#1a4b6c] bg-[#06121e] p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden font-mono max-h-[92vh] flex flex-col"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#5cdbdf]" />
-                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#5cdbdf]" />
-
-                            <div className="flex items-center justify-between border-b border-[#1a4b6c] pb-4 mb-4 shrink-0">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 border border-[#1a4b6c] bg-[#0a1f2e] flex items-center justify-center text-[#5cdbdf] font-bold text-base shadow-[0_0_10px_rgba(92,219,223,0.2)]">
-                                        {(selectedAstronaut.Name || 'A').charAt(0)}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-base sm:text-lg font-bold text-white tracking-wider">
-                                            {selectedAstronaut.Name || 'Astronaut Specialist'}
-                                        </h3>
-                                        <span className="text-[11px] text-[#5cdbdf] tracking-widest">
-                                            CALLSIGN: AST-{selectedAstronaut.Astronaut ?? selectedAstronaut.id ?? 'N/A'} • NASA HRP BIOASTRONAUTICS
-                                        </span>
-                                    </div>
+                        <div className="space-y-4 text-sm">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                    <p className="text-xs text-slate-500">Mission duration</p>
+                                    <p className="mt-1 text-lg font-bold">
+                                        {selectedAstronaut['Mission_duration(Days)'] ??
+                                            (selectedAstronaut as any).duration ??
+                                            (selectedAstronaut as any).missionDurationDays ??
+                                            180}{' '}
+                                        <span className="text-xs font-normal text-slate-500">days</span>
+                                    </p>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedAstronaut(null)}
-                                    className="p-1.5 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-400 hover:text-white hover:border-[#5cdbdf] transition-colors cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            <div className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                        <span className="text-slate-400 block text-[10px] tracking-wider">MISSION DURATION</span>
-                                        <span className="text-lg font-bold text-white mt-1 block">
-                                            {selectedAstronaut['Mission_duration(Days)'] ?? (selectedAstronaut as any).duration ?? (selectedAstronaut as any).missionDurationDays ?? 180} <span className="text-xs text-sky-400 font-normal">Days</span>
-                                        </span>
-                                    </div>
-
-                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                        <span className="text-slate-400 block text-[10px] tracking-wider">BMD LOSS (G)</span>
-                                        <span className="text-lg font-bold text-rose-400 mt-1 block">
-                                            {selectedAstronaut.Bone_Density_Loss || '-3.0%'}
-                                        </span>
-                                    </div>
-
-                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                        <span className="text-slate-400 block text-[10px] tracking-wider">RADIATION EXPOSURE (R)</span>
-                                        <span className="text-lg font-bold text-amber-300 mt-1 block">
-                                            {selectedAstronaut.Radiation_Exposure ? `${selectedAstronaut.Radiation_Exposure} mSv` : '88 mSv'}
-                                        </span>
-                                    </div>
-
-                                    <div className="p-3 border border-[#1a4b6c] bg-[#0a1f2e]">
-                                        <span className="text-slate-400 block text-[10px] tracking-wider">PRIMARY HAZARD (RIDGE)</span>
-                                        <span className="text-sm font-bold text-[#5cdbdf] mt-1 block truncate">
-                                            {selectedAstronaut.Hazard_Focus || 'Gravity Fields (G)'}
-                                        </span>
-                                    </div>
+                                <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                    <p className="text-xs text-slate-500">BMD loss</p>
+                                    <p className="mt-1 text-lg font-bold text-red-400">{selectedAstronaut.Bone_Density_Loss || '-3.0%'}</p>
                                 </div>
-
-                                {/* NASA 5-Hazard Clinical Assessment Box */}
-                                <div className="p-4 border border-[#1a4b6c] bg-[#0a1f2e]/80 text-slate-300 leading-relaxed">
-                                    <div className="text-[#5cdbdf] font-bold mb-2 flex items-center justify-between tracking-wider">
-                                        <span className="flex items-center gap-1.5">
-                                            <Shield className="w-3.5 h-3.5" /> NASA HRP 5-HAZARD EVALUATION
-                                        </span>
-                                        <span className="text-[10px] px-2 py-0.5 border border-cyan-800 bg-cyan-950/60 text-cyan-300">
-                                            {selectedAstronaut.NASA_HRP_Protocol || 'NASA-STD-3001'}
-                                        </span>
-                                    </div>
-                                    <div className="space-y-1.5 text-[11px]">
-                                        <div>
-                                            <strong className="text-white">Active Countermeasures:</strong>{' '}
-                                            {selectedAstronaut.Countermeasures_Used || 'ARED High-Resistance Exercise, Bisphosphonate protocol, SSLA dynamic circadian spectrum lighting.'}
-                                        </div>
-                                        <div>
-                                            <strong className="text-white">Neuro-Ocular & Vision (SANS):</strong>{' '}
-                                            <span className="text-cyan-300">{selectedAstronaut.Vision_Change || 'Clear (Nominal optic nerve sheath)'}</span>
-                                        </div>
-                                        <div>
-                                            <strong className="text-white">Affiliation & Role:</strong>{' '}
-                                            {selectedAstronaut.Country || 'USA / NASA'} • {selectedAstronaut.No_of_Mission || 1} Spaceflight Mission(s)
-                                        </div>
-                                    </div>
+                                <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                    <p className="text-xs text-slate-500">Radiation exposure</p>
+                                    <p className="mt-1 text-lg font-bold text-amber-300">
+                                        {selectedAstronaut.Radiation_Exposure ? `${selectedAstronaut.Radiation_Exposure} mSv` : '88 mSv'}
+                                    </p>
+                                </div>
+                                <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4">
+                                    <p className="text-xs text-slate-500">Primary hazard</p>
+                                    <p className="mt-1 truncate font-bold text-cyan-300">
+                                        {selectedAstronaut.Hazard_Focus || 'Gravity Fields (G)'}
+                                    </p>
                                 </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-4 border-t border-[#1a4b6c] shrink-0">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setSelectedAstronaut(null)}
-                                        className="px-4 py-2 border border-[#1a4b6c] bg-[#0a1f2e] text-slate-300 hover:text-white hover:border-[#5cdbdf] transition-all cursor-pointer tracking-wider"
-                                    >
-                                        CLOSE DOSSIER
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setHealthRiskAstronaut(selectedAstronaut);
-                                            setIsHealthRiskOpen(true);
-                                        }}
-                                        className="px-4 py-2 border border-amber-600/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                                    >
-                                        <Activity className="w-3.5 h-3.5 text-amber-400" />
-                                        <span>EVALUATE HEALTH RISKS</span>
-                                    </button>
+                            <div className="rounded-xl border border-slate-800 bg-[#0a1220] p-4 leading-relaxed text-slate-300">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                                        <Shield size={14} /> NASA HRP 5-hazard evaluation
+                                    </span>
+                                    <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                                        {selectedAstronaut.NASA_HRP_Protocol || 'NASA-STD-3001'}
+                                    </span>
                                 </div>
-
-                                <Link
-                                    href="/"
-                                    className="inline-flex items-center gap-2 px-5 py-2 border border-[#5cdbdf] bg-[#5cdbdf] text-slate-950 font-bold hover:bg-cyan-300 transition-all shadow-[0_0_15px_rgba(92,219,223,0.3)] tracking-wider"
-                                >
-                                    <span>OPEN IN MISSION HUD</span>
-                                    <ChevronRight className="w-4 h-4" />
-                                </Link>
+                                <div className="space-y-2 text-xs">
+                                    <p>
+                                        <strong className="text-white">Active countermeasures:</strong>{' '}
+                                        {selectedAstronaut.Countermeasures_Used || 'ARED exercise, bisphosphonate protocol, SSLA circadian lighting.'}
+                                    </p>
+                                    <p>
+                                        <strong className="text-white">Neuro-ocular and vision (SANS):</strong>{' '}
+                                        <span className="text-cyan-300">{selectedAstronaut.Vision_Change || 'Clear (nominal optic nerve sheath)'}</span>
+                                    </p>
+                                    <p>
+                                        <strong className="text-white">Affiliation:</strong> {selectedAstronaut.Country || 'USA / NASA'} •{' '}
+                                        {selectedAstronaut.No_of_Mission || 1} mission(s)
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+
+                        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setSelectedAstronaut(null)} className={btn}>
+                                    Close
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setHealthRiskAstronaut(selectedAstronaut);
+                                        setIsHealthRiskOpen(true);
+                                    }}
+                                    className={btn}
+                                >
+                                    <Activity size={16} className="text-amber-400" /> Evaluate health risks
+                                </button>
+                            </div>
+                            <Link href="/" className={btnPrimary}>
+                                Open in mission HUD <ChevronRight size={16} />
+                            </Link>
+                        </div>
+                    </Modal>
                 )}
 
-                {/* ORBIT Health Risk & Microgravity Pathophysiology Engine Modal */}
+                {/* Health risk modal (unchanged) */}
                 <AstronautHealthRiskModal
                     isOpen={isHealthRiskOpen}
                     onClose={() => setIsHealthRiskOpen(false)}
@@ -2502,5 +1867,55 @@ export default function Dataset({ records = [], hazards = [] }: DatasetProps) {
                 />
             </div>
         </>
+    );
+}
+
+function Modal({
+    onClose,
+    title,
+    subtitle,
+    icon,
+    size = 'max-w-2xl',
+    children,
+}: {
+    onClose: () => void;
+    title: string;
+    subtitle?: string;
+    icon?: React.ReactNode;
+    size?: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className={`flex max-h-[90vh] w-full ${size} flex-col rounded-2xl border border-slate-800 bg-[#0b1626] p-6 text-white shadow-2xl`}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="mb-5 flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        {icon && (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+                                {icon}
+                            </span>
+                        )}
+                        <div>
+                            <h3 className="font-bold">{title}</h3>
+                            {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="cursor-pointer rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto pr-1">{children}</div>
+            </div>
+        </div>
     );
 }
