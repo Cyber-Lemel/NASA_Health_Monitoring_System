@@ -61,11 +61,16 @@ export default function AstronautHealthRiskModal({
     const runAnalysis = async () => {
         setLoading(true);
         try {
+            const customKey = localStorage.getItem('orbit_gemini_api_key') || undefined;
+            const customModel = localStorage.getItem('orbit_gemini_model') || 'gemini-3-flash-preview';
+
             const response = await fetch('/api/astronaut/health-risk/analyze', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
+                    ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
+                    'X-Gemini-Model': customModel,
                 },
                 body: JSON.stringify({
                     systolic_bp: systolic,
@@ -79,6 +84,9 @@ export default function AstronautHealthRiskModal({
                     hydration_pct: hydration,
                     astronaut_name: astronaut?.bio.name || 'CDR. Reid Wiseman',
                     astronaut_id: astronaut?.bio.id || 'AST-01',
+                    ai_analysis: true,
+                    gemini_api_key: customKey,
+                    gemini_model: customModel,
                 }),
             });
 
@@ -375,7 +383,19 @@ export default function AstronautHealthRiskModal({
                                                         {analysisResult.health_score} / 100
                                                     </strong>
                                                 </span>
+                                                {analysisResult.gemini_flight_clearance && (
+                                                    <span className="flex items-center gap-1.5 rounded-full border border-cyan-400/50 bg-cyan-950/90 px-3 py-0.5 text-xs font-bold text-cyan-300">
+                                                        <Sparkles size={12} className="text-cyan-400 animate-pulse" />
+                                                        EVA: {analysisResult.gemini_flight_clearance}
+                                                    </span>
+                                                )}
                                             </div>
+                                            {analysisResult.ai_powered && (
+                                                <div className="flex items-center gap-2 text-[11px] font-mono text-cyan-300/90">
+                                                    <Sparkles size={12} className="text-cyan-400" />
+                                                    <span>CLINICAL REASONING: {analysisResult.ai_engine}</span>
+                                                </div>
+                                            )}
                                             <p className="text-sm leading-relaxed text-slate-300">
                                                 {analysisResult.clinical_summary}
                                             </p>

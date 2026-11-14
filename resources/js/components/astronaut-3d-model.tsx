@@ -23,6 +23,7 @@ const telemetryAnchors = [
     { id: 'hand', side: 'left', point: new THREE.Vector3(-1.59, -0.64, 0.4) },
     { id: 'ribs', side: 'left', point: new THREE.Vector3(-0.56, 0.91, 0.35) },
     { id: 'core', side: 'right', point: new THREE.Vector3(0.28, 0.65, 0.34) },
+    { id: 'hydration', side: 'right', point: new THREE.Vector3(-0.35, -0.15, 0.35) },
 ] as const;
 
 export type CharacterModel = 'piccolo' | 'luffy' | 'frieren' | 'astronaut';
@@ -131,7 +132,7 @@ export default function Astronaut3DModel({
     oxygenSaturation,
     demoHeartRate,
     evaStatus,
-    astronautName = 'CDR. Elena Rovani',
+    astronautName = 'CDR. Reid Wiseman',
     telemetryOverlay,
 }: Astronaut3DModelProps) {
     const mountRef = useRef<HTMLDivElement>(null);
@@ -2092,9 +2093,10 @@ export default function Astronaut3DModel({
                     const startY = card.top + card.height / 2 - frame.top;
 
                     // Depending on what model is showing, target the correct joint pose
+                    const isAstronautModel = (viewMode === 'suit' || viewMode === 'thermal') && characterModel === 'astronaut';
                     const pose = id === 'hand'
-                        ? (viewMode === 'suit' && characterModel === 'astronaut' ? armPivots[1].suit.meshes : armPivots[1].outfit.meshes)
-                        : (viewMode === 'suit' && characterModel === 'astronaut' ? astronautUpperBody : piccoloUpperBody);
+                        ? (isAstronautModel ? armPivots[1].suit.meshes : armPivots[1].outfit.meshes)
+                        : (isAstronautModel ? astronautUpperBody : piccoloUpperBody);
 
                     pose.localToWorld(projectedAnchor.copy(point)).project(camera);
 

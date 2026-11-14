@@ -70,6 +70,8 @@ export default function HealthMonitoring() {
     const [submitted, setSubmitted] = useState(false);
     const [lastEntry, setLastEntry] = useState<Date | null>(null);
     const [message, setMessage] = useState('');
+    const [isEvaluating, setIsEvaluating] = useState(false);
+    const [evaluationResult, setEvaluationResult] = useState<any | null>(null);
 
     const label = 'flex justify-between text-xs font-semibold uppercase tracking-wider text-slate-400';
     const unit = 'font-normal normal-case text-slate-500';
@@ -129,7 +131,7 @@ export default function HealthMonitoring() {
         return mins < 1 ? 'Last entry was just now' : `Last entry was ${mins} min ago`;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitted(true);
 
@@ -138,14 +140,52 @@ export default function HealthMonitoring() {
             return;
         }
 
-        // TODO: send to the backend later, e.g. router.post('/health-checkins', form)
-        console.log('Check-in saved:', { ...form, simulated });
-        setLastEntry(new Date());
-        setMessage('Health check-in saved.');
-        setForm(emptyForm);
-        setTouched({});
-        setSubmitted(false);
-        setSimulated(false);
+        setIsEvaluating(true);
+        setMessage('Consulting Google Gemini AI Flight Surgeon Engine...');
+
+        try {
+            const customKey = localStorage.getItem('orbit_gemini_api_key') || undefined;
+            const customModel = localStorage.getItem('orbit_gemini_model') || 'gemini-3-flash-preview';
+
+            const res = await fetch('/api/astronaut/health-risk/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
+                    'X-Gemini-Model': customModel,
+                },
+                body: JSON.stringify({
+                    systolic_bp: Number(form.systolic) || 120,
+                    diastolic_bp: Number(form.diastolic) || 80,
+                    heart_rate: Number(form.heartRate) || 75,
+                    sp_o2: Number(form.spo2) || 98.0,
+                    core_temp: Number(form.bodyTemp) || 37.0,
+                    cabin_co2: Number(form.cabinPco2) || 2.4,
+                    hydration_pct: 78,
+                    astronaut_name: 'CDR. Reid Wiseman',
+                    ai_analysis: true,
+                    gemini_api_key: customKey,
+                    gemini_model: customModel,
+                }),
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setEvaluationResult(data);
+                setLastEntry(new Date());
+                setMessage('Health check-in analyzed and saved successfully.');
+            } else {
+                setMessage(data.message || 'Check-in saved.');
+            }
+        } catch {
+            setLastEntry(new Date());
+            setMessage('Health check-in saved.');
+        } finally {
+            setIsEvaluating(false);
+            setTouched({});
+            setSubmitted(false);
+        }
     };
 
     const hasErrors = message === 'Please fix the highlighted fields.';
@@ -261,11 +301,63 @@ export default function HealthMonitoring() {
 
                         <button
                             type="submit"
-                            className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-900 hover:bg-cyan-300"
+                            disabled={isEvaluating}
+                            className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-900 hover:bg-cyan-300 transition-all disabled:opacity-50 cursor-pointer"
                         >
-                            Save health check-in
+                            {isEvaluating ? 'Evaluating with Gemini AI...' : 'Save health check-in'}
                         </button>
                     </div>
+
+                    {evaluationResult && (
+                        <div className="mt-6 rounded-2xl border border-cyan-500/40 bg-gradient-to-br from-[#061e33] to-[#041220] p-6 shadow-xl">
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-800/60 pb-3">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="size-5 text-cyan-400 animate-pulse" />
+                                    <h3 className="font-bold text-white text-base">
+                                        GEMINI AI FLIGHT SURGEON CLINICAL EVALUATION
+                                    </h3>
+                                </div>
+                                <span className={`rounded-full px-3 py-1 text-xs font-bold border ${
+                                    evaluationResult.overall_risk_level === 'NOMINAL'
+                                        ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                                        : 'bg-amber-950 text-amber-300 border-amber-500/50'
+                                }`}>
+                                    RISK: {evaluationResult.overall_risk_level} • SCORE: {evaluationResult.health_score}/100
+                                </span>
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                                {evaluationResult.gemini_flight_clearance && (
+                                    <div className="p-3 rounded-xl bg-cyan-950/70 border border-cyan-500/40 flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-300 uppercase">EVA Flight Clearance:</span>
+                                        <span className="text-xs font-bold text-cyan-300 font-mono">
+                                            {evaluationResult.gemini_flight_clearance}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <p className="text-sm leading-relaxed text-slate-200">
+                                    {evaluationResult.clinical_summary}
+                                </p>
+
+                                {evaluationResult.autonomous_countermeasures?.length > 0 && (
+                                    <div className="mt-4 pt-3 border-t border-cyan-900/40">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-2">
+                                            Priority Countermeasures:
+                                        </h4>
+                                        <ul className="space-y-1.5 text-xs text-slate-300">
+                                            {evaluationResult.autonomous_countermeasures.slice(0, 4).map((cm: string, i: number) => (
+                                                <li key={i} className="flex items-start gap-2">
+                                                    <span className="text-cyan-400 font-bold">•</span>
+                                                    <span>{cm}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </form>
 
                 <aside className="space-y-6">

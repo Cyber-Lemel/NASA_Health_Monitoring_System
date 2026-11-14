@@ -8,6 +8,8 @@ import {
     FileSpreadsheet,
     FileText,
     ShieldCheck,
+    Sparkles,
+    LoaderCircle,
     type LucideIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -294,6 +296,8 @@ const exportJson = (r: Report) => {
 
 export default function Reports({ records = [] }: { records?: DatasetRow[] }) {
     const [selectedId, setSelectedId] = useState('daily');
+    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
     const reports = buildReports(records);
     const selected = reports.find((r) => r.id === selectedId) ?? reports[0];
@@ -302,6 +306,45 @@ export default function Reports({ records = [] }: { records?: DatasetRow[] }) {
     const exportBtn =
         'flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 py-2.5 text-sm font-semibold hover:bg-slate-800';
     const PREVIEW_ROWS = 10;
+
+    const handleGenerateGeminiReport = async () => {
+        setIsGeneratingAi(true);
+        try {
+            const customKey = localStorage.getItem('orbit_gemini_api_key') || undefined;
+            const customModel = localStorage.getItem('orbit_gemini_model') || 'gemini-3-flash-preview';
+
+            const prompt = `Act as Chief Medical Officer and Flight Surgeon for NASA exploration operations.
+Provide an authoritative medical intelligence executive summary for the active astronaut cohort report:
+Report Title: ${selected.title}
+Cohort Statistics: ${selected.stats.map((s) => `${s.label}: ${s.value}`).join(' | ')}
+Summary: ${selected.summary}
+Provide clinical spaceflight findings, RIDGE hazard impact evaluation, and flight surgeon recommendations in 2 concise paragraphs.`;
+
+            const res = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
+                    'X-Gemini-Model': customModel,
+                },
+                body: JSON.stringify({
+                    message: prompt,
+                    gemini_api_key: customKey,
+                    gemini_model: customModel,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success && data.reply) {
+                setAiSummary(data.reply);
+            }
+        } catch {
+            // fallback
+        } finally {
+            setIsGeneratingAi(false);
+        }
+    };
 
     return (
         <div className="min-h-screen bg-[#060d18] p-8 text-white">
@@ -404,8 +447,40 @@ export default function Reports({ records = [] }: { records?: DatasetRow[] }) {
 
                 <div className="mt-5 grid gap-6 lg:grid-cols-[2fr_1fr]">
                     <div className="rounded-2xl border border-slate-800 bg-[#0a1220] p-6">
-                        <h3 className="text-sm font-bold">Executive health summary</h3>
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className="text-sm font-bold">Executive health summary</h3>
+                            <button
+                                type="button"
+                                onClick={handleGenerateGeminiReport}
+                                disabled={isGeneratingAi}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 rounded-lg text-xs font-bold text-cyan-300 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                {isGeneratingAi ? (
+                                    <>
+                                        <LoaderCircle size={14} className="animate-spin" />
+                                        <span>Analyzing with Gemini AI...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles size={14} className="text-cyan-400" />
+                                        <span>Analyze with Gemini AI</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
                         <p className="mt-3 text-sm leading-relaxed text-slate-400">{selected.summary}</p>
+
+                        {aiSummary && (
+                            <div className="mt-4 p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/40 text-xs sm:text-sm leading-relaxed text-cyan-100 space-y-2">
+                                <div className="flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase tracking-wider">
+                                    <Sparkles size={14} />
+                                    <span>Google Gemini AI Clinical Assessment</span>
+                                </div>
+                                <div className="whitespace-pre-line text-slate-200 text-xs sm:text-[13px]">
+                                    {aiSummary}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="mt-6 grid grid-cols-3 gap-3">
                             {selected.stats.map((s) => (

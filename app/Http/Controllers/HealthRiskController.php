@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class HealthRiskController extends Controller
 {
@@ -146,6 +148,45 @@ class HealthRiskController extends Controller
             $riskLevel = 'MODERATE_RISK';
         }
 
+        $standardSummary = $this->buildClinicalSummary($riskLevel, $identifiedRisks, $astronautName);
+
+        // Check for Google Gemini AI Flight Surgeon Analysis
+        $geminiKey = $request->input('gemini_api_key')
+            ?: $request->header('X-Gemini-Key')
+            ?: config('services.gemini.api_key');
+
+        $geminiModel = (string) ($request->input('gemini_model')
+            ?: $request->header('X-Gemini-Model')
+            ?: config('services.gemini.model')
+            ?: 'gemini-3-flash-preview');
+
+        $geminiAssessment = null;
+        if (is_string($geminiKey) && ! empty($geminiKey) && $request->boolean('ai_analysis', ! app()->environment('testing'))) {
+            $geminiAssessment = $this->generateGeminiFlightSurgeonAssessment($geminiKey, $geminiModel, [
+                'astronaut_name' => $astronautName,
+                'astronaut_id' => $astronautId,
+                'risk_level' => $riskLevel,
+                'health_score' => $overallScore,
+                'identified_risks' => $identifiedRisks,
+                'vitals' => [
+                    'blood_pressure' => "{$systolic}/{$diastolic} mmHg",
+                    'heart_rate' => "{$heartRate} bpm",
+                    'spo2' => "{$spo2}%",
+                    'core_temperature' => "{$coreTemp}°C",
+                    'radiation_rate' => "{$radiationRate} mSv/h",
+                    'cumulative_radiation' => "{$cumulativeRadiation} mSv",
+                    'bone_loss' => "{$boneLossPct}%",
+                    'hydration' => "{$hydrationPct}%",
+                    'cabin_co2' => "{$cabinCo2} mmHg",
+                ],
+            ]);
+        }
+
+        $allCountermeasures = array_values(array_unique(array_merge(
+            $immediateActions,
+            $geminiAssessment['countermeasures'] ?? []
+        ), SORT_REGULAR));
+
         return response()->json([
             'success' => true,
             'timestamp' => now()->toIso8601String(),
@@ -168,9 +209,14 @@ class HealthRiskController extends Controller
             'overall_risk_level' => $riskLevel,
             'identified_risks_count' => count($identifiedRisks),
             'identified_risks' => $identifiedRisks,
-            'autonomous_countermeasures' => array_values(array_unique($immediateActions, SORT_REGULAR)),
+            'autonomous_countermeasures' => $allCountermeasures,
             'hazard_correlations' => array_values(array_unique($hazardCorrelations)),
-            'clinical_summary' => $this->buildClinicalSummary($riskLevel, $identifiedRisks, $astronautName),
+            'clinical_summary' => $geminiAssessment['clinical_evaluation'] ?? $standardSummary,
+            'standard_clinical_summary' => $standardSummary,
+            'gemini_clinical_evaluation' => $geminiAssessment['clinical_evaluation'] ?? null,
+            'gemini_flight_clearance' => $geminiAssessment['flight_clearance'] ?? ($riskLevel === 'NOMINAL' ? 'GO FOR NOMINAL EVA' : ($riskLevel === 'MODERATE_RISK' ? 'CAUTION: RESTRICTED EVA (MONITOR VITALS)' : 'NO-GO FOR EVA: CLINICAL REST PROTOCOL')),
+            'ai_powered' => $geminiAssessment !== null,
+            'ai_engine' => $geminiAssessment ? 'Google Gemini AI ('.$geminiAssessment['model'].')' : 'Autonomous NASA-STD-3001 Engine',
         ]);
     }
 
@@ -588,5 +634,67 @@ class HealthRiskController extends Controller
         $topRisk = $risks[0]['title'] ?? 'Identified Physiological Anomaly';
 
         return "{$riskLevel} detected for {$name} across {$count} indicator(s). Primary concern: {$topRisk}. Autonomous countermeasures have been generated for immediate execution.";
+    }
+
+    /**
+     * Call Google Gemini API to generate an authoritative Flight Surgeon Clinical Assessment.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{clinical_evaluation: string, flight_clearance: string, countermeasures: list<string>, model: string}|null
+     */
+    private function generateGeminiFlightSurgeonAssessment(string $apiKey, string $preferredModel, array $payload): ?array
+    {
+        $systemPrompt = 'You are the Chief Flight Surgeon and Biomedical Lead for NASA Mission Control Houston (ORBIT HRP System).
+Analyze the following astronaut spaceflight telemetry, identified physiological risks, and spaceflight hazard correlations under NASA-STD-3001 and the 5 Hazards of Human Spaceflight (RIDGE).
+Provide an authoritative, clinical flight surgeon evaluation.
+Respond in valid JSON with exactly the following structure:
+{
+  "clinical_evaluation": "Concise 2-paragraph medical assessment of microgravity pathophysiology, cardiovascular status, intracranial pressure/SANS risks, and acute telemetry findings.",
+  "flight_clearance": "GO FOR NOMINAL EVA | CAUTION: RESTRICTED EVA (MONITOR VITALS) | NO-GO FOR EVA: MANDATORY CLINICAL REST PROTOCOL",
+  "countermeasures": ["Clear actionable countermeasure 1", "Clear actionable countermeasure 2", "Clear actionable countermeasure 3"]
+}';
+
+        $prompt = "Telemetry Data:\n".json_encode($payload, JSON_PRETTY_PRINT);
+
+        $candidateModels = array_unique([$preferredModel, 'gemini-3-flash-preview', 'gemini-3.5-flash-lite']);
+
+        foreach ($candidateModels as $model) {
+            try {
+                $response = Http::timeout(6)->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}", [
+                    'contents' => [
+                        [
+                            'role' => 'user',
+                            'parts' => [['text' => $systemPrompt."\n\n".$prompt]],
+                        ],
+                    ],
+                    'generationConfig' => [
+                        'temperature' => 0.2,
+                        'maxOutputTokens' => 800,
+                        'responseMimeType' => 'application/json',
+                    ],
+                ]);
+
+                if ($response->successful()) {
+                    $json = $response->json();
+                    $rawText = $json['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                    if (is_string($rawText)) {
+                        $cleaned = trim($rawText);
+                        $parsed = json_decode($cleaned, true);
+                        if (is_array($parsed) && isset($parsed['clinical_evaluation'])) {
+                            return [
+                                'clinical_evaluation' => (string) $parsed['clinical_evaluation'],
+                                'flight_clearance' => (string) ($parsed['flight_clearance'] ?? 'GO FOR NOMINAL EVA'),
+                                'countermeasures' => is_array($parsed['countermeasures'] ?? null) ? array_values(array_map('strval', $parsed['countermeasures'])) : [],
+                                'model' => $model,
+                            ];
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::debug("Gemini health risk assessment attempt failed on {$model}: ".$e->getMessage());
+            }
+        }
+
+        return null;
     }
 }

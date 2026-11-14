@@ -45,31 +45,34 @@ Route::get('/api/astronaut/health-risk', [HealthRiskController::class, 'analyze'
 
 // Real-time Telemetry & WebSockets
 Route::post('/api/telemetry/ping', function (Request $request) {
-    $astronautId = $request->input('astronaut_id', 'AST-00');
+    $astronautId = $request->input('astronaut_id', 'AST-01');
     $astronautName = $request->input('astronaut_name');
     $role = $request->input('role');
 
     if (! $astronautName) {
-        $astronauts = [
-            ['id' => 'AST-00', 'name' => 'CDR. Elena Rovani', 'role' => 'Mission Commander'],
-            ['id' => 'AST-01', 'name' => 'Commander Alex Vance', 'role' => 'Mission Commander'],
-            ['id' => 'AST-02', 'name' => 'Dr. Elena Rostova', 'role' => 'Payload Specialist'],
-            ['id' => 'AST-03', 'name' => 'Major Marcus Cole', 'role' => 'Flight Engineer'],
-        ];
-        $found = collect($astronauts)->firstWhere('id', $astronautId);
-        if ($found) {
+        $dbRecord = DatasetRecord::where('Astronaut', $astronautId)->first();
+
+        if ($dbRecord) {
+            $astronautName = $dbRecord->Name;
+            $role = $dbRecord->Role ?? 'Mission Commander';
+        } else {
+            $fallbackRoster = [
+                'AST-01' => ['name' => 'CDR. Reid Wiseman', 'role' => 'Mission Commander'],
+                'AST-02' => ['name' => 'Victor Glover', 'role' => 'Pilot / Flight Surgeon Ops'],
+                'AST-03' => ['name' => 'Christina Koch', 'role' => 'Mission Specialist'],
+                'AST-04' => ['name' => 'Jeremy Hansen', 'role' => 'Mission Specialist'],
+            ];
+            $found = $fallbackRoster[$astronautId] ?? ['name' => 'Mission Specialist', 'role' => 'Astronaut Specialist'];
             $astronautName = $found['name'];
             $role = $found['role'];
-        } else {
-            $dbRecord = DatasetRecord::where('Astronaut', $astronautId)->first();
-            $astronautName = $dbRecord ? $dbRecord->Name : 'Mission Specialist';
-            $role = 'Astronaut Specialist';
         }
     }
 
     $heartRate = (int) ($request->input('heart_rate') ?: rand(70, 138));
     $oxygen = (float) ($request->input('oxygen_saturation') ?: round(rand(955, 995) / 10, 1));
     $temp = (float) ($request->input('core_temperature') ?: round(rand(366, 384) / 10, 1));
+    $respiration = (int) ($request->input('respiration') ?: rand(15, 23));
+    $hydration = (int) ($request->input('hydration') ?: rand(70, 84));
     $pressure = (float) ($request->input('suit_pressure') ?: round(rand(41, 45) / 10, 1)); // 4.1 to 4.5 psi
     $radiation = (float) ($request->input('radiation_rate') ?: round(rand(180, 245) / 1000, 3));
 
@@ -82,6 +85,8 @@ Route::post('/api/telemetry/ping', function (Request $request) {
         'heart_rate' => $heartRate,
         'oxygen_saturation' => $oxygen,
         'core_temperature' => $temp,
+        'respiration' => $respiration,
+        'hydration' => $hydration,
         'suit_pressure' => $pressure,
         'radiation_rate' => $radiation,
         'status' => $status,
@@ -92,7 +97,7 @@ Route::post('/api/telemetry/ping', function (Request $request) {
 
     return response()->json([
         'success' => true,
-        'message' => 'Telemetry ping dispatched to Reverb WebSocket channel',
+        'message' => 'Telemetry synchronized to real-time DSN telemetry stream and WebSocket channel',
         'telemetry' => $telemetry,
     ]);
 })->name('telemetry.ping');
@@ -102,8 +107,9 @@ Route::get('/flare-demo', function () {
     throw new Exception('Flare / Ignition Error Display Test: Telemetry and database error tracking is active.');
 });
 
-// NASA AI Chatbot endpoint (accessible across the entire system)
+// NASA AI Chatbot endpoint & Gemini AI health check (accessible across the entire system)
 Route::post('/api/ai/chat', [ChatbotController::class, 'chat'])->name('ai.chat');
+Route::post('/api/ai/test-key', [ChatbotController::class, 'testKey'])->name('ai.testKey');
 
 // Catch-all auth redirects to ensure no login screens or gates are shown
 Route::redirect('/login', '/')->name('login');

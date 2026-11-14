@@ -38,6 +38,7 @@ interface Message {
     sources?: ChatSource[];
     timestamp: string;
     liveFetched?: boolean;
+    engine?: string;
 }
 
 const INITIAL_MESSAGES: Message[] = [
@@ -354,15 +355,22 @@ export default function NasaChatbot() {
             const csrfToken =
                 (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
 
+            const customKey = localStorage.getItem('orbit_gemini_api_key') || undefined;
+            const customModel = localStorage.getItem('orbit_gemini_model') || 'gemini-3-flash-preview';
+
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
+                    ...(customKey ? { 'X-Gemini-Key': customKey } : {}),
+                    'X-Gemini-Model': customModel,
                 },
                 body: JSON.stringify({
                     message: queryText,
+                    gemini_api_key: customKey,
+                    gemini_model: customModel,
                     history: messages.slice(-6).map((m) => ({
                         role: m.role,
                         content: m.content,
@@ -381,6 +389,7 @@ export default function NasaChatbot() {
                 sources: data.sources || [],
                 timestamp: data.timestamp || new Date().toUTCString().slice(17, 25) + ' UTC',
                 liveFetched: data.liveDataFetched ?? true,
+                engine: data.engine || 'Google Gemini AI',
             };
 
             setMessages((prev) => [...prev, aiMsg]);
@@ -478,10 +487,10 @@ export default function NasaChatbot() {
                                         DSN LIVE
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                    <span>REAL-TIME NASA WEB & TELEMETRY UPLINK</span>
-                                </div>
+                                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-cyan-300">
+                                                    <Sparkles className="h-3 w-3 text-cyan-400 animate-pulse" />
+                                                    <span>GEMINI AI FLIGHT CO-PILOT ACTIVE</span>
+                                                </div>
                             </div>
                         </div>
 
@@ -547,6 +556,12 @@ export default function NasaChatbot() {
                                                     <span className="text-[#5cdbdf] font-bold">CAPCOM AI</span>
                                                     <span>•</span>
                                                     <span>{msg.timestamp}</span>
+                                                    {msg.engine && (
+                                                        <span className="text-cyan-300 font-mono text-[9px] bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-800/80 flex items-center gap-1">
+                                                            <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                                                            {msg.engine}
+                                                        </span>
+                                                    )}
                                                     {msg.liveFetched && (
                                                         <span className="text-emerald-400 font-mono text-[9px] bg-emerald-950/70 px-1.5 py-0.2 rounded border border-emerald-800/80">
                                                             NASA-VERIFIED

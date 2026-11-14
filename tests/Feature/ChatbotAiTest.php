@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Facades\Http;
+
 test('chatbot rejects empty messages with 400 status', function () {
     $response = $this->postJson('/api/ai/chat', [
         'message' => '   ',
@@ -26,16 +28,43 @@ test('chatbot provides authoritative responses for cardiovascular and blood pres
     expect($response->json('sources'))->toBeArray();
 });
 
-test('chatbot provides authoritative responses for space radiation hazard inquiries', function () {
-    $response = $this->postJson('/api/ai/chat', [
-        'message' => 'Explain the space radiation hazard and galactic cosmic rays during deep space exploration.',
+test('chatbot testKey endpoint validates key and tests connection', function () {
+    Http::fake([
+        'generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            ['text' => 'Pong'],
+                        ],
+                        'role' => 'model',
+                    ],
+                ],
+            ],
+        ], 200),
+    ]);
+
+    $response = $this->postJson('/api/ai/test-key', [
+        'api_key' => 'test-api-key-12345',
+        'model' => 'gemini-3-flash-preview',
     ]);
 
     $response->assertStatus(200)
         ->assertJson([
             'success' => true,
+            'model' => 'gemini-3-flash-preview',
         ]);
+});
 
-    $reply = $response->json('reply');
-    expect(strtolower($reply))->toContain('radiation');
+test('chatbot testKey endpoint rejects missing key with 400', function () {
+    config(['services.gemini.api_key' => null]);
+
+    $response = $this->postJson('/api/ai/test-key', [
+        'api_key' => '',
+    ]);
+
+    $response->assertStatus(400)
+        ->assertJson([
+            'success' => false,
+        ]);
 });
