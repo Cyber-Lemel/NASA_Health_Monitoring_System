@@ -1,88 +1,72 @@
 import { useState } from 'react';
-import { Clock, ShieldCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { Clock, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
 
-type Form = {
-    heartRate: string;
-    bloodOxygen: string;
-    bodyTemp: string;
-    sleepDuration: string;
-    fatigueLevel: string;
-    exerciseDur: string;
-    symptoms: string;
+type Field = {
+    key: string;
+    label: string;
+    unit: string;
+    group: 'vitals' | 'other';
+    step: string;
+    placeholder: string;
+    hint?: string; // text shown under the input
+    nominal?: (n: number) => boolean; // true = nominal
+    hard: [number, number]; // values outside this are invalid
+    gen: [number, number, number]; // simulated min, max, decimals
 };
 
-type Errors = Partial<Record<keyof Form, string>>;
+const FIELDS: Field[] = [
+    { key: 'systolic', label: 'Systolic BP', unit: 'mmHg', group: 'vitals', step: '1', placeholder: 'e.g. 118', hint: 'Nominal: < 120', nominal: (n) => n < 120, hard: [70, 250], gen: [100, 119, 0] },
+    { key: 'diastolic', label: 'Diastolic BP', unit: 'mmHg', group: 'vitals', step: '1', placeholder: 'e.g. 76', hint: 'Nominal: < 80', nominal: (n) => n < 80, hard: [40, 150], gen: [60, 79, 0] },
+    { key: 'heartRate', label: 'Heart Rate', unit: 'bpm', group: 'vitals', step: '1', placeholder: 'e.g. 74', hint: 'Nominal: 60 - 100', nominal: (n) => n >= 60 && n <= 100, hard: [30, 220], gen: [60, 100, 0] },
+    { key: 'spo2', label: 'SpO2 Oxygen', unit: '%', group: 'vitals', step: '1', placeholder: 'e.g. 98', hint: 'Nominal: 95 - 100%', nominal: (n) => n >= 95 && n <= 100, hard: [70, 100], gen: [95, 99, 0] },
+    { key: 'cabinPco2', label: 'Cabin pCO2', unit: 'mmHg', group: 'vitals', step: '0.1', placeholder: 'e.g. 2.4', hint: 'Limit: < 3.0 mmHg', nominal: (n) => n < 3.0, hard: [0, 10], gen: [1.5, 2.9, 1] },
+    { key: 'bodyTemp', label: 'Body Temperature', unit: '°C', group: 'other', step: '0.1', placeholder: 'e.g. 36.7', hard: [35, 38.5], gen: [36.2, 37.2, 1] },
+    { key: 'sleepDuration', label: 'Sleep Duration', unit: 'hours', group: 'other', step: '0.1', placeholder: 'e.g. 7.2', hard: [0, 14], gen: [6, 8.5, 1] },
+    { key: 'exerciseDur', label: 'Exercise Duration', unit: 'minutes', group: 'other', step: '1', placeholder: 'e.g. 42', hard: [0, 300], gen: [15, 60, 0] },
+];
 
-const emptyForm: Form = {
-    heartRate: '',
-    bloodOxygen: '',
-    bodyTemp: '',
-    sleepDuration: '',
-    fatigueLevel: '3',
-    exerciseDur: '',
-    symptoms: '',
-};
-
-// Validation rules: [min, max]
-const ranges = {
-    heartRate: [40, 180],
-    bloodOxygen: [90, 100],
-    bodyTemp: [35, 38.5],
-    sleepDuration: [0, 14],
-    exerciseDur: [0, 300],
-} as const;
-
-const fieldNames: Record<keyof typeof ranges, string> = {
-    heartRate: 'Heart rate',
-    bloodOxygen: 'Blood oxygen',
-    bodyTemp: 'Body temperature',
-    sleepDuration: 'Sleep duration',
-    exerciseDur: 'Exercise duration',
-};
+type Form = Record<string, string>;
+type Errors = Record<string, string>;
 
 const MAX_NOTES = 500;
+
+const emptyForm: Form = {
+    ...Object.fromEntries(FIELDS.map((f) => [f.key, ''])),
+    fatigueLevel: '3',
+    symptoms: '',
+};
 
 const rand = (min: number, max: number, decimals = 0) =>
     Number((Math.random() * (max - min) + min).toFixed(decimals));
 
 const generateReading = (): Form => ({
-    heartRate: String(rand(60, 100)),
-    bloodOxygen: String(rand(95, 99)),
-    bodyTemp: String(rand(36.2, 37.2, 1)),
-    sleepDuration: String(rand(6, 8.5, 1)),
+    ...Object.fromEntries(FIELDS.map((f) => [f.key, String(rand(f.gen[0], f.gen[1], f.gen[2]))])),
     fatigueLevel: String(rand(1, 5)),
-    exerciseDur: String(rand(15, 60)),
     symptoms: '',
 });
 
-// Returns an error message per invalid field
 const validate = (form: Form): Errors => {
     const errors: Errors = {};
 
-    (Object.keys(ranges) as (keyof typeof ranges)[]).forEach((key) => {
-        const value = form[key].trim();
-        const [min, max] = ranges[key];
+    FIELDS.forEach((f) => {
+        const value = form[f.key].trim();
+        const [min, max] = f.hard;
 
-        if (value === '') {
-            errors[key] = `${fieldNames[key]} is required.`;
-        } else if (Number.isNaN(Number(value))) {
-            errors[key] = 'Enter a valid number.';
-        } else if (Number(value) < min || Number(value) > max) {
-            errors[key] = `Must be between ${min} and ${max}.`;
-        }
+        if (value === '') errors[f.key] = `${f.label} is required.`;
+        else if (Number.isNaN(Number(value))) errors[f.key] = 'Enter a valid number.';
+        else if (Number(value) < min || Number(value) > max) errors[f.key] = `Must be between ${min} and ${max}.`;
     });
 
     if (form.symptoms.length > MAX_NOTES) {
         errors.symptoms = `Notes must be ${MAX_NOTES} characters or less.`;
     }
-
     return errors;
 };
 
 export default function HealthMonitoring() {
     const [simulated, setSimulated] = useState(false);
     const [form, setForm] = useState<Form>(emptyForm);
-    const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitted, setSubmitted] = useState(false);
     const [lastEntry, setLastEntry] = useState<Date | null>(null);
     const [message, setMessage] = useState('');
@@ -94,26 +78,32 @@ export default function HealthMonitoring() {
 
     const errors = validate(form);
 
-    // Show an error only after the field was touched or the form was submitted
-    const showError = (name: keyof Form) =>
+    const showError = (name: string) =>
         (touched[name] || submitted) && errors[name] ? errors[name] : '';
 
-    const inputClass = (name: keyof Form) =>
-        `${input} ${showError(name) ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-cyan-400'}`;
+    // A filled, valid value that is outside its nominal range
+    const isOffNominal = (f: Field) => {
+        const v = form[f.key].trim();
+        if (v === '' || errors[f.key] || !f.nominal) return false;
+        return !f.nominal(Number(v));
+    };
 
-    const ErrorText = ({ name }: { name: keyof Form }) =>
-        showError(name) ? <p className="mt-1 text-xs text-red-400">{showError(name)}</p> : null;
+    const inputClass = (f: { key: string }) => {
+        const field = FIELDS.find((x) => x.key === f.key);
+        const border = showError(f.key)
+            ? 'border-red-500 focus:border-red-400'
+            : field && isOffNominal(field)
+              ? 'border-amber-400 focus:border-amber-300'
+              : 'border-slate-700 focus:border-cyan-400';
+        return `${input} ${border}`;
+    };
 
-    const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-    ) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value });
         setMessage('');
     };
 
-    const handleBlur = (
-        e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
-    ) => {
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setTouched({ ...touched, [e.target.name]: true });
     };
 
@@ -125,21 +115,13 @@ export default function HealthMonitoring() {
         setMessage('');
     };
 
-    // Completeness: share of the 7 fields that are filled
+    // Completeness
     const values = Object.values(form);
     const filled = values.filter((v) => v.trim() !== '').length;
     const completeness = Math.round((filled / values.length) * 100);
 
-    // Out-of-range check for the sidebar card (only for filled fields)
-    const outOfRange = (Object.keys(ranges) as (keyof typeof ranges)[]).filter(
-        (key) => {
-            if (form[key] === '') return false;
-            const n = Number(form[key]);
-            const [min, max] = ranges[key];
-            return n < min || n > max;
-        },
-    );
-    const inRange = outOfRange.length === 0;
+    // Sidebar status
+    const offNominal = FIELDS.filter(isOffNominal);
 
     const lastEntryText = () => {
         if (!lastEntry) return 'No entries yet';
@@ -168,6 +150,34 @@ export default function HealthMonitoring() {
 
     const hasErrors = message === 'Please fix the highlighted fields.';
 
+    const renderField = (f: Field) => (
+        <div key={f.key}>
+            <label htmlFor={f.key} className={label}>
+                {f.label} <span className={unit}>{f.unit}</span>
+            </label>
+            <input
+                id={f.key}
+                name={f.key}
+                type="number"
+                step={f.step}
+                placeholder={f.placeholder}
+                value={form[f.key]}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={inputClass(f)}
+            />
+            {showError(f.key) ? (
+                <p className="mt-1 text-xs text-red-400">{showError(f.key)}</p>
+            ) : (
+                f.hint && (
+                    <p className={`mt-1 text-xs ${isOffNominal(f) ? 'text-amber-400' : 'text-slate-500'}`}>
+                        {f.hint}
+                    </p>
+                )
+            )}
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-[#060d18] p-8 text-white">
             <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
@@ -182,89 +192,64 @@ export default function HealthMonitoring() {
                         Enter measurements manually or generate a safe simulated reading
                     </p>
 
-                    <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5">
-                        <div>
-                            <label htmlFor="heartRate" className={label}>
-                                Heart Rate <span className={unit}>BPM</span>
-                            </label>
-                            <input id="heartRate" name="heartRate" type="number" placeholder="e.g. 74"
-                                value={form.heartRate} onChange={handleChange} onBlur={handleBlur}
-                                className={inputClass('heartRate')} />
-                            <ErrorText name="heartRate" />
-                        </div>
+                    <h3 className="mt-6 text-xs font-bold uppercase tracking-widest text-cyan-400">Vital signs</h3>
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-5 xl:grid-cols-3">
+                        {FIELDS.filter((f) => f.group === 'vitals').map(renderField)}
+                    </div>
 
-                        <div>
-                            <label htmlFor="bloodOxygen" className={label}>
-                                Blood Oxygen <span className={unit}>SpO2 %</span>
-                            </label>
-                            <input id="bloodOxygen" name="bloodOxygen" type="number" placeholder="e.g. 98"
-                                value={form.bloodOxygen} onChange={handleChange} onBlur={handleBlur}
-                                className={inputClass('bloodOxygen')} />
-                            <ErrorText name="bloodOxygen" />
-                        </div>
-
-                        <div>
-                            <label htmlFor="bodyTemp" className={label}>
-                                Body Temperature <span className={unit}>&deg;C</span>
-                            </label>
-                            <input id="bodyTemp" name="bodyTemp" type="number" step="0.1" placeholder="e.g. 36.7"
-                                value={form.bodyTemp} onChange={handleChange} onBlur={handleBlur}
-                                className={inputClass('bodyTemp')} />
-                            <ErrorText name="bodyTemp" />
-                        </div>
-
-                        <div>
-                            <label htmlFor="sleepDuration" className={label}>
-                                Sleep Duration <span className={unit}>hours</span>
-                            </label>
-                            <input id="sleepDuration" name="sleepDuration" type="number" step="0.1" placeholder="e.g. 7.2"
-                                value={form.sleepDuration} onChange={handleChange} onBlur={handleBlur}
-                                className={inputClass('sleepDuration')} />
-                            <ErrorText name="sleepDuration" />
-                        </div>
+                    <h3 className="mt-8 text-xs font-bold uppercase tracking-widest text-cyan-400">Daily factors</h3>
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-5">
+                        {FIELDS.filter((f) => f.group === 'other').map(renderField)}
 
                         <div>
                             <label htmlFor="fatigueLevel" className={label}>
                                 Fatigue Level <span className={unit}>{form.fatigueLevel}/10</span>
                             </label>
-                            <input id="fatigueLevel" name="fatigueLevel" type="range" min="1" max="10"
-                                value={form.fatigueLevel} onChange={handleChange}
-                                className="mt-5 w-full accent-cyan-400" />
-                        </div>
-
-                        <div>
-                            <label htmlFor="exerciseDur" className={label}>
-                                Exercise Duration <span className={unit}>minutes</span>
-                            </label>
-                            <input id="exerciseDur" name="exerciseDur" type="number" placeholder="e.g. 42"
-                                value={form.exerciseDur} onChange={handleChange} onBlur={handleBlur}
-                                className={inputClass('exerciseDur')} />
-                            <ErrorText name="exerciseDur" />
+                            <input
+                                id="fatigueLevel"
+                                name="fatigueLevel"
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={form.fatigueLevel}
+                                onChange={handleChange}
+                                className="mt-5 w-full accent-cyan-400"
+                            />
                         </div>
                     </div>
 
                     <div className="mt-5">
                         <label htmlFor="symptoms" className={label}>
                             Symptoms or Notes
-                            <span className={unit}>{form.symptoms.length}/{MAX_NOTES}</span>
+                            <span className={unit}>
+                                {form.symptoms.length}/{MAX_NOTES}
+                            </span>
                         </label>
-                        <textarea id="symptoms" name="symptoms" rows={4}
+                        <textarea
+                            id="symptoms"
+                            name="symptoms"
+                            rows={4}
                             placeholder="Describe any symptoms, discomfort, or contextual notes..."
-                            value={form.symptoms} onChange={handleChange} onBlur={handleBlur}
-                            className={inputClass('symptoms')}></textarea>
-                        <ErrorText name="symptoms" />
+                            value={form.symptoms}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            className={inputClass({ key: 'symptoms' })}
+                        ></textarea>
+                        {showError('symptoms') && <p className="mt-1 text-xs text-red-400">{showError('symptoms')}</p>}
                     </div>
 
                     {message && (
-                        <p className={`mt-4 text-sm ${hasErrors ? 'text-red-400' : 'text-cyan-300'}`}>
-                            {message}
-                        </p>
+                        <p className={`mt-4 text-sm ${hasErrors ? 'text-red-400' : 'text-cyan-300'}`}>{message}</p>
                     )}
 
                     <div className="mt-6 flex items-center justify-between border-t border-slate-800 pt-5">
                         <label className="flex cursor-pointer items-center gap-3">
-                            <input type="checkbox" checked={simulated}
-                                onChange={(e) => handleToggle(e.target.checked)} className="sr-only" />
+                            <input
+                                type="checkbox"
+                                checked={simulated}
+                                onChange={(e) => handleToggle(e.target.checked)}
+                                className="sr-only"
+                            />
                             <span className={`flex h-6 w-11 items-center rounded-full p-0.5 transition ${simulated ? 'bg-cyan-400' : 'bg-slate-600'}`}>
                                 <span className={`h-5 w-5 rounded-full bg-white transition ${simulated ? 'translate-x-5' : ''}`}></span>
                             </span>
@@ -274,8 +259,10 @@ export default function HealthMonitoring() {
                             </span>
                         </label>
 
-                        <button type="submit"
-                            className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-900 hover:bg-cyan-300">
+                        <button
+                            type="submit"
+                            className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-900 hover:bg-cyan-300"
+                        >
                             Save health check-in
                         </button>
                     </div>
@@ -288,9 +275,8 @@ export default function HealthMonitoring() {
                         </span>
                         <h3 className="mt-4 text-lg font-bold">Software-only inputs</h3>
                         <p className="mt-2 text-sm text-slate-400">
-                            All readings in this prototype come from manual entry, generated
-                            simulation, or uploaded datasets. No wearables or physical
-                            sensors are connected.
+                            All readings in this prototype come from manual entry, generated simulation, or
+                            uploaded datasets. No wearables or physical sensors are connected.
                         </p>
                     </div>
 
@@ -303,20 +289,22 @@ export default function HealthMonitoring() {
                             <span className="font-bold text-emerald-400">{completeness}%</span>
                         </div>
                         <div className="mt-2 h-2 rounded-full bg-slate-800">
-                            <div className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all"
-                                style={{ width: `${completeness}%` }}></div>
+                            <div
+                                className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all"
+                                style={{ width: `${completeness}%` }}
+                            ></div>
                         </div>
 
                         <p className="mt-5 flex items-center gap-2 text-sm text-slate-400">
-                            {inRange ? (
+                            {offNominal.length === 0 ? (
                                 <>
                                     <ShieldCheck size={16} className="text-emerald-400" />
-                                    Values are within expected ranges
+                                    Values are within nominal ranges
                                 </>
                             ) : (
                                 <>
-                                    <ShieldAlert size={16} className="text-amber-400" />
-                                    Check: {outOfRange.map((k) => fieldNames[k]).join(', ')}
+                                    <ShieldAlert size={16} className="shrink-0 text-amber-400" />
+                                    Outside nominal: {offNominal.map((f) => f.label).join(', ')}
                                 </>
                             )}
                         </p>

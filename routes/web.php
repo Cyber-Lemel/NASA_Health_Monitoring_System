@@ -111,3 +111,7 @@ Route::redirect('/settings', '/');
 Route::get('/health-monitoring', function () {
     return inertia('health-monitoring');
 });
+
+Route::get('/reports', function () {
+    return inertia('reports');
+});
