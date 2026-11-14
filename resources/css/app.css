@@ -186,12 +186,15 @@
 .orbit-header-option {
     width: 100%;
     text-align: left;
+    position: relative;
+    z-index: 2;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .orbit-header-control:hover,
 .orbit-header-option:hover {
-    background: rgb(215 232 255 / 10%);
-    color: white;
+    background: rgb(92 219 223 / 16%);
+    color: #ffffff;
 }
 
 .orbit-header-option:disabled {
@@ -200,7 +203,14 @@
 }
 
 .orbit-header-popover {
-    --glass-tint: rgb(12 21 36 / 83%);
+    --glass-tint: rgb(6 17 30 / 98%);
+    background: rgb(6 17 30 / 98%) !important;
+    border: 1px solid rgb(92 219 223 / 40%) !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 16px 36px -4px rgb(0 0 0 / 95%), 0 0 20px rgb(10 31 46 / 80%), 0 0 1px rgb(92 219 223 / 50%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(140%) !important;
+    backdrop-filter: blur(24px) saturate(140%) !important;
+    overflow: hidden;
 }
 
 .orbit-segmented,

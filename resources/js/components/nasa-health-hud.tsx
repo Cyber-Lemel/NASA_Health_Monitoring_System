@@ -784,7 +784,7 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                             <ChevronDown aria-hidden="true" className="size-3.5 text-slate-400" />
                         </button>
                         {isEvaSelectorOpen && (
-                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-40 p-1.5">
+                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-44 p-1.5 bg-[#06111e]/98 backdrop-blur-2xl border border-[#1a4b6c] shadow-[0_16px_36px_-4px_rgba(0,0,0,0.95),0_0_20px_rgba(10,31,46,0.8)] rounded-xl">
                                 {(['ON-GOING', 'STANDBY', 'SCHEDULED', 'COMPLETED', 'ABORTED'] as const).map((status) => (
                                     <button
                                         key={status}
@@ -820,7 +820,7 @@ export default function NasaHealthHud({ initialData }: { initialData?: any }) {
                             More
                         </button>
                         {isHeaderActionsOpen && (
-                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-52 p-1.5" onClick={(event) => {
+                            <div className="orbit-glass orbit-header-popover absolute top-full right-0 z-50 mt-2 w-56 p-1.5 bg-[#06111e]/98 backdrop-blur-2xl border border-[#1a4b6c] shadow-[0_16px_36px_-4px_rgba(0,0,0,0.95),0_0_20px_rgba(10,31,46,0.8)] rounded-xl" onClick={(event) => {
                                 if ((event.target as HTMLElement).closest('button, a[href]')) setIsHeaderActionsOpen(false);
                             }}>
                                 <Link href="/dataset" className="orbit-header-option"><Database aria-hidden="true" className="size-4" /> Hazards and archive</Link>
