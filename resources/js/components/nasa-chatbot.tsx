@@ -59,18 +59,13 @@ Transmit your mission medical query below or select a quick briefing command.`,
         sources: [
             {
                 title: 'NASA: The 5 Hazards of Human Spaceflight (RIDGE)',
-                url: 'https://www.nasa.gov/humans-in-space/hazards-of-human-spaceflight/',
+                url: 'https://www.nasa.gov/hrp/hazards/',
                 source: 'NASA Human Research Program',
             },
             {
                 title: 'NASA Human Research Program (HRP)',
                 url: 'https://www.nasa.gov/hrp',
                 source: 'NASA JSC Houston',
-            },
-            {
-                title: 'NASA Deep Space Network Operations',
-                url: 'https://www.nasa.gov/directorates/somd/space-communications-navigation-program/deep-space-network/',
-                source: 'NASA JPL',
             },
         ],
         timestamp: '12:00:00 UTC',
