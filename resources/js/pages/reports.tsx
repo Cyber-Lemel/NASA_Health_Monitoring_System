@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Head, Link } from '@inertiajs/react';
 import {
+    ArrowLeft,
     BrainCircuit,
     Braces,
     ClipboardList,
@@ -7,6 +9,7 @@ import {
     Database,
     FileSpreadsheet,
     FileText,
+    LayoutDashboard,
     ShieldCheck,
     Sparkles,
     LoaderCircle,
@@ -135,10 +138,10 @@ function buildReports(records: DatasetRow[]): Report[] {
         active.length === 0
             ? 'No numeric health metrics were found in the dataset. Check the column names in METRICS.'
             : `Averages across ${total} records: ` +
-              active
-                  .map((m) => `${m.label.toLowerCase()} ${round1(m.values.reduce((a, b) => a + b, 0) / m.values.length)} ${m.unit}`)
-                  .join(', ') +
-              '.';
+            active
+                .map((m) => `${m.label.toLowerCase()} ${round1(m.values.reduce((a, b) => a + b, 0) / m.values.length)} ${m.unit}`)
+                .join(', ') +
+            '.';
 
     const anomalySummary =
         flags.length === 0
@@ -1072,12 +1075,12 @@ const exportJson = (r: Report, aiAnalysis?: string | null) => {
             stats: Object.fromEntries(r.stats.map((s) => [s.label, s.value])),
             geminiClinicalAssessment: aiAnalysis
                 ? {
-                      rawMarkdown: aiAnalysis,
-                      plainText: stripMarkdown(aiAnalysis),
-                      provider: 'Google Gemini AI (gemini-3-flash-preview)',
-                      standard: 'NASA-STD-3001 Spaceflight Medical Clearance',
-                      status: 'VERIFIED',
-                  }
+                    rawMarkdown: aiAnalysis,
+                    plainText: stripMarkdown(aiAnalysis),
+                    provider: 'Google Gemini AI (gemini-3-flash-preview)',
+                    standard: 'NASA-STD-3001 Spaceflight Medical Clearance',
+                    status: 'VERIFIED',
+                }
                 : null,
             details: r.rows.map((row) => Object.fromEntries(r.headers.map((h, i) => [h, row[i]]))),
         };
@@ -1436,14 +1439,28 @@ Provide clinical spaceflight findings, RIDGE hazard impact evaluation, and fligh
 
     return (
         <div className="min-h-screen bg-[#060d18] p-8 text-white">
+            <Head title="ORBIT • Health Reports & Analytics" />
+
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
-                        Health Summaries &amp; Exports
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+
+                        <span className="text-slate-600 text-xs">/</span>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">
+                            Health Summaries &amp; Exports
+                        </p>
+                    </div>
                     <h1 className="mt-1 text-3xl font-bold">Reports</h1>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/80 px-4 py-2 text-xs font-bold text-slate-200 shadow-md shadow-black/30 hover:border-cyan-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+                        title="Return to ORBIT Mission Control Dashboard"
+                    >
+                        <ArrowLeft size={15} className="text-cyan-400" />
+                        <span>Back to Dashboard</span>
+                    </Link>
                     <button
                         type="button"
                         disabled={records.length === 0}
@@ -1460,9 +1477,18 @@ Provide clinical spaceflight findings, RIDGE hazard impact evaluation, and fligh
             </div>
 
             {records.length === 0 && (
-                <div className={`${card} mt-6 flex items-center gap-3 p-6 text-sm text-slate-400`}>
-                    <Database size={18} className="text-cyan-300" />
-                    No dataset records found. Import a dataset first, then reload this page.
+                <div className={`${card} mt-6 flex flex-wrap items-center justify-between gap-4 p-6 text-sm text-slate-400`}>
+                    <div className="flex items-center gap-3">
+                        <Database size={18} className="text-cyan-300" />
+                        <span>No dataset records found. Import a dataset first from the dashboard, then reload this page.</span>
+                    </div>
+                    <Link
+                        href="/"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:border-cyan-400 hover:text-white transition"
+                    >
+                        <ArrowLeft size={13} />
+                        <span>Back to Dashboard</span>
+                    </Link>
                 </div>
             )}
 
@@ -1475,9 +1501,8 @@ Provide clinical spaceflight findings, RIDGE hazard impact evaluation, and fligh
                         <div
                             key={r.id}
                             onClick={() => setSelectedId(r.id)}
-                            className={`${card} cursor-pointer p-6 transition ${
-                                active ? 'border-cyan-400/60' : 'hover:border-slate-600'
-                            }`}
+                            className={`${card} cursor-pointer p-6 transition ${active ? 'border-cyan-400/60' : 'hover:border-slate-600'
+                                }`}
                         >
                             <div className="flex items-start justify-between">
                                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
